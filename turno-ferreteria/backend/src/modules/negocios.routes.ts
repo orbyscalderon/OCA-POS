@@ -11,6 +11,7 @@ import { paginationSchema, paginar, metaPaginacion } from "../lib/pagination.js"
 import { calcularSplitFianza } from "../lib/split.js";
 import { limitePeluqueros, limiteNegocios } from "../lib/planes.js";
 import { SLUGS_PERFIL } from "../config/perfiles.js";
+import { requireAcceso, ROLES_ASIGNABLES } from "../lib/acceso.js";
 
 export const negociosRouter = Router();
 
@@ -97,28 +98,34 @@ function distanciaKm(lat1: number, lng1: number, lat2: number, lng2: number): nu
 
 // ---------- Negocios del dueño autenticado (admin_negocio) ----------
 // Debe declararse ANTES de "/:slug" para no ser capturada por esa ruta comodín.
+// Selección de campos que se muestran tanto para negocios propios como para negocios
+// donde el usuario es personal (miembro con rol funcional).
+const CAMPOS_NEGOCIO_MIO = {
+  id: true, nombreComercial: true, categoria: true, perfil: true, slug: true,
+  direccion: true, telefonoContacto: true, lat: true, lng: true,
+  estadoSuscripcion: true, suscripcionHasta: true,
+} as const;
+
 negociosRouter.get(
   "/mios",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
-    const negocios = await prisma.negocio.findMany({
-      where: { duenoId: req.user!.sub },
-      select: {
-        id: true,
-        nombreComercial: true,
-        categoria: true,
-        perfil: true,
-        slug: true,
-        direccion: true,
-        telefonoContacto: true,
-        lat: true,
-        lng: true,
-        estadoSuscripcion: true,
-        suscripcionHasta: true,
-      },
-      orderBy: { createdAt: "desc" },
-    });
+    const usuarioId = req.user!.sub;
+    const [propios, comoMiembro] = await Promise.all([
+      prisma.negocio.findMany({
+        where: { duenoId: usuarioId },
+        select: CAMPOS_NEGOCIO_MIO,
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.miembroNegocio.findMany({
+        where: { usuarioId, activo: true },
+        select: { rol: true, negocio: { select: CAMPOS_NEGOCIO_MIO } },
+      }),
+    ]);
+    const negocios = [
+      ...propios.map((n) => ({ ...n, miRol: "dueno" as const })),
+      ...comoMiembro.map((m) => ({ ...m.negocio, miRol: m.rol })),
+    ];
     res.json({ negocios });
   }),
 );
@@ -225,10 +232,11 @@ negociosRouter.post(
     }
 
     // Genera un slug único agregando sufijo si hace falta.
+    // "buscar" queda reservado: es la ruta del buscador público (/api/storefront/buscar).
     const base = slugify(data.nombreComercial) || "negocio";
     let slug = base;
     let intento = 1;
-    while (await prisma.negocio.findUnique({ where: { slug } })) {
+    while (slug === "buscar" || (await prisma.negocio.findUnique({ where: { slug } }))) {
       slug = `${base}-${++intento}`;
     }
 
@@ -399,17 +407,23 @@ negociosRouter.patch(
 );
 
 // ---------- Admin genera un link de invitación único ----------
+const crearInvitacionSchema = z.object({
+  // Si se omite: invitación al equipo de peluqueros (módulo de citas), como antes.
+  // Si se define: invitación a personal con ese rol funcional (cajero/inventario/contador/gerente).
+  rol: z.enum(ROLES_ASIGNABLES).optional(),
+});
+
 negociosRouter.post(
   "/:id/invitaciones",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const negocioId = req.params.id;
-    await assertDueno(negocioId, req.user!.sub);
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "equipo");
+    const { rol } = crearInvitacionSchema.parse(req.body ?? {});
 
     const token = randomBytes(24).toString("base64url");
     const expiraEn = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
-    await prisma.invitacionNegocio.create({ data: { negocioId, token, expiraEn } });
+    await prisma.invitacionNegocio.create({ data: { negocioId, token, expiraEn, rolAsignado: rol ?? null } });
 
     res.status(201).json({
       token,
@@ -438,7 +452,6 @@ negociosRouter.get(
 negociosRouter.post(
   "/invitaciones/:token/aceptar",
   requireAuth,
-  requireRole("peluquero"),
   asyncHandler(async (req, res) => {
     const usuarioId = req.user!.sub;
 
@@ -449,6 +462,20 @@ negociosRouter.post(
       }
       // Lock del negocio para respetar el límite de 5 al aceptar por invitación.
       await tx.$queryRaw`SELECT id FROM negocios WHERE id = ${inv.negocioId} FOR UPDATE`;
+
+      // Invitación a personal con rol funcional (cajero/inventario/contador/gerente):
+      // no pasa por el equipo de peluqueros ni su límite de 5.
+      if (inv.rolAsignado) {
+        const existente = await tx.miembroNegocio.findUnique({
+          where: { negocioId_usuarioId: { negocioId: inv.negocioId, usuarioId } },
+        });
+        if (existente?.activo) throw Conflict("Ya perteneces a este negocio", "YA_MIEMBRO");
+        const membresia = existente
+          ? await tx.miembroNegocio.update({ where: { id: existente.id }, data: { rol: inv.rolAsignado, activo: true } })
+          : await tx.miembroNegocio.create({ data: { negocioId: inv.negocioId, usuarioId, rol: inv.rolAsignado } });
+        await tx.invitacionNegocio.update({ where: { id: inv.id }, data: { usadaPor: usuarioId, usadaEn: new Date() } });
+        return { tipo: "equipo" as const, membresia };
+      }
 
       const yaMiembro = await tx.peluqueroEquipo.findUnique({
         where: { unique_peluquero_negocio: { negocioId: inv.negocioId, usuarioId } },
@@ -478,10 +505,55 @@ negociosRouter.post(
         where: { id: inv.id },
         data: { usadaPor: usuarioId, usadaEn: new Date() },
       });
-      return membresia;
+      return { tipo: "peluquero" as const, membresia };
     });
 
-    res.json({ membresia: resultado });
+    res.json({ membresia: resultado.membresia, tipo: resultado.tipo });
+  }),
+);
+
+// ---------- Personal del negocio (rol funcional): listar, cambiar rol, quitar ----------
+negociosRouter.get(
+  "/:id/miembros",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo");
+    const miembros = await prisma.miembroNegocio.findMany({
+      where: { negocioId: req.params.id },
+      select: { id: true, rol: true, activo: true, createdAt: true, usuario: { select: { id: true, nombre: true, email: true, telefono: true } } },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ miembros, rolesAsignables: ROLES_ASIGNABLES });
+  }),
+);
+
+const actualizarMiembroSchema = z.object({
+  rol: z.enum(ROLES_ASIGNABLES).optional(),
+  activo: z.boolean().optional(),
+});
+
+negociosRouter.patch(
+  "/:id/miembros/:miembroId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo");
+    const d = actualizarMiembroSchema.parse(req.body);
+    const m = await prisma.miembroNegocio.findUnique({ where: { id: req.params.miembroId } });
+    if (!m || m.negocioId !== req.params.id) throw NotFound("Miembro no encontrado");
+    const actualizado = await prisma.miembroNegocio.update({ where: { id: m.id }, data: d });
+    res.json({ miembro: actualizado });
+  }),
+);
+
+negociosRouter.delete(
+  "/:id/miembros/:miembroId",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo");
+    const m = await prisma.miembroNegocio.findUnique({ where: { id: req.params.miembroId } });
+    if (!m || m.negocioId !== req.params.id) throw NotFound("Miembro no encontrado");
+    await prisma.miembroNegocio.delete({ where: { id: m.id } });
+    res.json({ ok: true });
   }),
 );
 

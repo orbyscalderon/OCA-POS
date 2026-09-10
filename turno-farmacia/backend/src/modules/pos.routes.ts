@@ -1,20 +1,14 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { BadRequest, Conflict, Forbidden, NotFound } from "../lib/errors.js";
+import { BadRequest, Conflict } from "../lib/errors.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireAcceso } from "../lib/acceso.js";
 
 export const posRouter = Router();
 
 const round2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
-
-async function assertDueno(negocioId: string, userId: number, rol: string) {
-  if (rol === "superadmin") return;
-  const n = await prisma.negocio.findUnique({ where: { id: negocioId }, select: { duenoId: true } });
-  if (!n) throw NotFound("Negocio no encontrado");
-  if (n.duenoId !== userId) throw Forbidden("Este negocio no es tuyo");
-}
 
 function rangoDia(fecha?: string) {
   const base = fecha && /^\d{4}-\d{2}-\d{2}$/.test(fecha) ? new Date(`${fecha}T00:00:00`) : new Date();
@@ -27,10 +21,9 @@ function rangoDia(fecha?: string) {
 posRouter.get(
   "/caja/actual",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const negocioId = z.string().min(1).parse(req.query.negocioId);
-    await assertDueno(negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "caja");
     const sesion = await prisma.sesionCaja.findFirst({ where: { negocioId, estado: "abierta" }, orderBy: { abiertaEn: "desc" } });
     res.json({ sesion });
   }),
@@ -39,10 +32,9 @@ posRouter.get(
 posRouter.post(
   "/caja/abrir",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const { negocioId, montoInicial } = z.object({ negocioId: z.string().min(1), montoInicial: z.coerce.number().min(0) }).parse(req.body);
-    await assertDueno(negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "caja");
     const sesion = await prisma.$transaction(async (tx) => {
       // Bloquea el negocio antes de comprobar: dos "abrir caja" concurrentes no deben
       // pasar ambos el chequeo y crear dos sesiones abiertas a la vez.
@@ -58,10 +50,9 @@ posRouter.post(
 posRouter.post(
   "/caja/cerrar",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const { negocioId, montoFinal } = z.object({ negocioId: z.string().min(1), montoFinal: z.coerce.number().min(0) }).parse(req.body);
-    await assertDueno(negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "caja");
     const sesion = await prisma.sesionCaja.findFirst({ where: { negocioId, estado: "abierta" } });
     if (!sesion) throw BadRequest("No hay caja abierta");
     const ventas = await prisma.venta.findMany({ where: { sesionCajaId: sesion.id, metodoPago: "efectivo" }, select: { total: true } });
@@ -91,10 +82,9 @@ const ventaSchema = z.object({
 posRouter.post(
   "/ventas",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const d = ventaSchema.parse(req.body);
-    await assertDueno(d.negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "pos");
 
     // Impuesto por línea: usa el de la línea o el del producto.
     const ids = d.lineas.map((l) => l.productoId).filter(Boolean) as string[];
@@ -141,10 +131,9 @@ posRouter.post(
 posRouter.get(
   "/ventas",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const negocioId = z.string().min(1).parse(req.query.negocioId);
-    await assertDueno(negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "pos");
     const { desde, hasta } = rangoDia(typeof req.query.fecha === "string" ? req.query.fecha : undefined);
     const ventas = await prisma.venta.findMany({
       where: { negocioId, createdAt: { gte: desde, lt: hasta } },

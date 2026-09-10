@@ -162,6 +162,32 @@ export const api = {
 // ----- Tipos compartidos -----
 export type Rol = "superadmin" | "admin_negocio" | "peluquero" | "cliente";
 
+// Rol funcional del usuario DENTRO de un negocio concreto (personal, no el rol global de
+// la cuenta). "dueno" = es el dueño; los demás son personal invitado con ese rol.
+export type RolNegocio = "dueno" | "gerente" | "cajero" | "inventario" | "contador";
+export const ROLES_ASIGNABLES: { value: Exclude<RolNegocio, "dueno">; label: string }[] = [
+  { value: "gerente", label: "Gerente (acceso total)" },
+  { value: "cajero", label: "Cajero (vender y caja)" },
+  { value: "inventario", label: "Inventario (productos y compras)" },
+  { value: "contador", label: "Contador (gastos y reportes)" },
+];
+export function rolNegocioLabel(rol: string): string {
+  return ROLES_ASIGNABLES.find((r) => r.value === rol)?.label.split(" (")[0] ?? rol;
+}
+
+// Espejo del capacidades del backend (lib/acceso.ts): qué secciones puede ver cada rol.
+// Es solo para ocultar pestañas — el backend vuelve a exigir el mismo permiso en cada ruta.
+const CAPACIDADES_NEGOCIO: Record<Exclude<RolNegocio, "dueno">, Set<string>> = {
+  gerente: new Set(["pos", "caja", "inventario", "compras", "gastos", "reportes", "impuestos", "equipo", "agro"]),
+  cajero: new Set(["pos", "caja"]),
+  inventario: new Set(["inventario", "compras", "agro"]),
+  contador: new Set(["gastos", "reportes", "impuestos", "compras"]),
+};
+export function puedeNegocio(rol: RolNegocio | undefined, area: string): boolean {
+  if (!rol || rol === "dueno") return true;
+  return CAPACIDADES_NEGOCIO[rol]?.has(area) ?? false;
+}
+
 export interface Usuario {
   id: number;
   nombre: string;
@@ -181,6 +207,8 @@ export interface Negocio {
   telefonoContacto: string;
   logoUrl?: string | null;
   coverUrl?: string | null;
+  // Presente cuando la lista viene de /negocios/mios: qué rol tiene ESTE usuario ahí.
+  miRol?: RolNegocio;
   lat?: number | null;
   lng?: number | null;
   ratingPromedio?: number;

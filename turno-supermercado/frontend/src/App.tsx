@@ -18,7 +18,9 @@ import { Storefront } from "./components/Storefront";
 import { Soluciones } from "./components/Soluciones";
 import { VerticalLanding } from "./components/VerticalLanding";
 import { PlatformHome } from "./components/PlatformHome";
+import { Buscador } from "./components/Buscador";
 import { COMPANY } from "./company";
+import { api } from "./api";
 import { useEffect, useState } from "react";
 
 // Modo "rubro fijo": si se compila con VITE_RUBRO_FIJO, este despliegue es un producto
@@ -74,6 +76,18 @@ export default function App() {
   // El superadmin puede alternar entre su panel, gestionar su propio negocio, o ver como cliente.
   const [modoSuper, setModoSuper] = useState<"panel" | "negocio" | "cliente">("panel");
 
+  // Una cuenta "cliente" normal reserva citas — pero si además es personal invitado de algún
+  // negocio (cajero/inventario/contador), debe ir al panel de negocio, no a la pantalla de reservas.
+  const [esPersonalDeNegocio, setEsPersonalDeNegocio] = useState<boolean | null>(null);
+  useEffect(() => {
+    if (usuario?.rol !== "cliente") { setEsPersonalDeNegocio(null); return; }
+    let vivo = true;
+    api.get<{ negocios: unknown[] }>("/negocios/mios")
+      .then((r) => { if (vivo) setEsPersonalDeNegocio(r.negocios.length > 0); })
+      .catch(() => { if (vivo) setEsPersonalDeNegocio(false); });
+    return () => { vivo = false; };
+  }, [usuario?.rol]);
+
   // Ruta pública: restablecer contraseña con token (/reset/:token).
   const resetMatch = path.match(/^\/reset\/(.+)$/);
   if (resetMatch) {
@@ -90,6 +104,11 @@ export default function App() {
   const tiendaMatch = path.match(/^\/tienda\/(.+)$/);
   if (tiendaMatch) {
     return (<><Header><LangToggle /></Header><Storefront slug={tiendaMatch[1]} /><Footer /></>);
+  }
+
+  // Buscador público de productos ("quién lo tiene"): accesible con o sin sesión.
+  if (path === "/buscar") {
+    return (<><Header><LangToggle /></Header><Buscador /><Footer /></>);
   }
 
   // Hub de soluciones por rubro y landings por rubro (marketing B2B).
@@ -186,7 +205,11 @@ export default function App() {
 
       <AccountBar />
 
-      {usuario.rol === "cliente" && <ClienteView />}
+      {usuario.rol === "cliente" && (
+        esPersonalDeNegocio === null
+          ? <div className="container"><p className="muted">{t("common.loading")}</p></div>
+          : esPersonalDeNegocio ? <AdminView /> : <ClienteView />
+      )}
       {usuario.rol === "peluquero" && <PeluqueroView />}
       {usuario.rol === "admin_negocio" && <AdminView />}
       {usuario.rol === "superadmin" && (

@@ -14,7 +14,7 @@ export function PlatformHome({ onNegocio, onReservar }: { onNegocio: () => void;
         <p className="sub">Punto de venta, inventario, reservas, préstamos, restaurante, granja y más. Eliges tu rubro y activamos solo lo que necesitas.</p>
       </div>
 
-      {/* Dos caminos: negocio o reservar */}
+      {/* Tres caminos: negocio, reservar un servicio, o buscar un producto */}
       <div className="grid grid-2" style={{ marginTop: 4 }}>
         <div className="card" style={{ borderColor: "var(--brand-500)" }}>
           <h2 style={{ marginTop: 0 }}>🏪 Para tu negocio</h2>
@@ -25,6 +25,11 @@ export function PlatformHome({ onNegocio, onReservar }: { onNegocio: () => void;
           <h2 style={{ marginTop: 0 }}>💇 Reservar un servicio</h2>
           <p className="muted">¿Buscas barbería, salón, spa o estética? Encuentra y reserva cerca de ti.</p>
           <button className="ghost" style={{ marginTop: 8 }} onClick={onReservar}>Explorar y reservar</button>
+        </div>
+        <div className="card">
+          <h2 style={{ marginTop: 0 }}>🔎 Buscar un producto</h2>
+          <p className="muted">¿Necesitas algo puntual? Te decimos quién lo tiene disponible ahora, con precio y stock real.</p>
+          <a href="/buscar"><button className="ghost" style={{ marginTop: 8 }}>Buscar producto</button></a>
         </div>
       </div>
 

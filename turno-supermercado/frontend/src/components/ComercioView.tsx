@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, type Negocio } from "../api";
+import { api, ApiError, puedeNegocio, type Negocio, type RolNegocio } from "../api";
 
 // Módulo POS + Inventario + Caja (rubros de retail/alimentos: supermercado, vape, ferretería, farmacia…).
 interface Producto {
@@ -13,19 +13,22 @@ interface Venta { id: string; total: string | number; metodoPago: string; create
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
 
-export function ComercioView({ negocio }: { negocio: Negocio }) {
-  const [tab, setTab] = useState<"vender" | "productos" | "caja">("vender");
+export function ComercioView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNegocio }) {
+  const vePos = puedeNegocio(miRol, "pos");
+  const veInventario = puedeNegocio(miRol, "inventario");
+  const veCaja = puedeNegocio(miRol, "caja");
+  const [tab, setTab] = useState<"vender" | "productos" | "caja">(vePos ? "vender" : veInventario ? "productos" : "caja");
   return (
     <div className="card">
       <h2>🛒 Comercio (POS)</h2>
       <div className="tabs" style={{ marginBottom: 12 }}>
-        <button className={`tab ${tab === "vender" ? "active" : ""}`} onClick={() => setTab("vender")}>Vender</button>
-        <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>Productos</button>
-        <button className={`tab ${tab === "caja" ? "active" : ""}`} onClick={() => setTab("caja")}>Caja</button>
+        {vePos && <button className={`tab ${tab === "vender" ? "active" : ""}`} onClick={() => setTab("vender")}>Vender</button>}
+        {veInventario && <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>Productos</button>}
+        {veCaja && <button className={`tab ${tab === "caja" ? "active" : ""}`} onClick={() => setTab("caja")}>Caja</button>}
       </div>
-      {tab === "vender" && <Vender negocio={negocio} />}
-      {tab === "productos" && <Productos negocio={negocio} />}
-      {tab === "caja" && <Caja negocio={negocio} />}
+      {tab === "vender" && vePos && <Vender negocio={negocio} />}
+      {tab === "productos" && veInventario && <Productos negocio={negocio} />}
+      {tab === "caja" && veCaja && <Caja negocio={negocio} />}
     </div>
   );
 }
@@ -135,11 +138,41 @@ function Vender({ negocio }: { negocio: Negocio }) {
   );
 }
 
+// Campos editables de un producto (todo menos el stock, que se mueve por /stock).
+interface FormProducto { nombre: string; sku: string; categoria: string; precioVenta: string; impuestoPct: string; stock: string; unidad: string; stockMinimo: string }
+const formVacio: FormProducto = { nombre: "", sku: "", categoria: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0" };
+function formDeProducto(p: Producto): FormProducto {
+  return { nombre: p.nombre, sku: p.sku ?? "", categoria: p.categoria ?? "", precioVenta: String(num(p.precioVenta)), impuestoPct: String(num(p.impuestoPct)), stock: String(num(p.stock)), unidad: p.unidad, stockMinimo: String(num(p.stockMinimo)) };
+}
+
+// Campos comunes del formulario (nombre/sku/categoría/precio/impuesto/stock mínimo).
+// `incluirStockInicial` solo aplica al crear: al editar el stock se mueve con +Entrada/−Salida.
+function CamposProducto({ f, onChange, incluirStockInicial }: { f: FormProducto; onChange: (f: FormProducto) => void; incluirStockInicial: boolean }) {
+  return (
+    <>
+      <label>Nombre</label>
+      <input value={f.nombre} onChange={(e) => onChange({ ...f, nombre: e.target.value })} required />
+      <label>Código de barras / SKU (opcional)</label>
+      <input value={f.sku} onChange={(e) => onChange({ ...f, sku: e.target.value })} />
+      <label>Categoría (opcional)</label>
+      <input value={f.categoria} onChange={(e) => onChange({ ...f, categoria: e.target.value })} />
+      <div className="grid grid-2">
+        <div><label>Precio de venta</label><input type="number" step="0.01" min="0" value={f.precioVenta} onChange={(e) => onChange({ ...f, precioVenta: e.target.value })} required /></div>
+        <div><label>Impuesto %</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => onChange({ ...f, impuestoPct: e.target.value })} /></div>
+        {incluirStockInicial && <div><label>Stock inicial</label><input type="number" step="0.001" value={f.stock} onChange={(e) => onChange({ ...f, stock: e.target.value })} /></div>}
+        <div><label>Stock mínimo</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
+      </div>
+    </>
+  );
+}
+
 // ---------- PRODUCTOS (Inventario) ----------
 function Productos({ negocio }: { negocio: Negocio }) {
   const [productos, setProductos] = useState<Producto[]>([]);
   const [nuevo, setNuevo] = useState(false);
-  const [f, setF] = useState({ nombre: "", sku: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0" });
+  const [f, setF] = useState<FormProducto>(formVacio);
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [fe, setFe] = useState<FormProducto>(formVacio);
   const [error, setError] = useState("");
 
   function cargar() { api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}`).then((r) => setProductos(r.productos)).catch(() => {}); }
@@ -147,8 +180,21 @@ function Productos({ negocio }: { negocio: Negocio }) {
 
   async function crear(e: React.FormEvent) {
     e.preventDefault(); setError("");
-    try { await api.post("/inventario", { ...f, negocioId: negocio.id }); setF({ nombre: "", sku: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0" }); setNuevo(false); cargar(); }
+    try { await api.post("/inventario", { ...f, negocioId: negocio.id }); setF(formVacio); setNuevo(false); cargar(); }
     catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
+  }
+
+  function empezarEdicion(p: Producto) { setEditandoId(p.id); setFe(formDeProducto(p)); setError(""); }
+
+  async function guardarEdicion(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editandoId) return;
+    setError("");
+    try {
+      const { stock: _stock, ...cambios } = fe; // el stock no se toca por acá
+      await api.patch(`/inventario/${editandoId}`, cambios);
+      setEditandoId(null); cargar();
+    } catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
   }
 
   async function ajustar(p: Producto, tipo: "entrada" | "salida") {
@@ -162,20 +208,11 @@ function Productos({ negocio }: { negocio: Negocio }) {
     <div>
       <div className="row spread">
         <span className="muted small">{productos.length} productos</span>
-        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => setNuevo((v) => !v)}>{nuevo ? "Cerrar" : "+ Producto"}</button>
+        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => { setNuevo((v) => !v); setEditandoId(null); }}>{nuevo ? "Cerrar" : "+ Producto"}</button>
       </div>
       {nuevo && (
         <form onSubmit={crear} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-          <label>Nombre</label>
-          <input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} required />
-          <label>Código de barras / SKU (opcional)</label>
-          <input value={f.sku} onChange={(e) => setF({ ...f, sku: e.target.value })} />
-          <div className="grid grid-2">
-            <div><label>Precio de venta</label><input type="number" step="0.01" min="0" value={f.precioVenta} onChange={(e) => setF({ ...f, precioVenta: e.target.value })} required /></div>
-            <div><label>Impuesto %</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => setF({ ...f, impuestoPct: e.target.value })} /></div>
-            <div><label>Stock inicial</label><input type="number" step="0.001" value={f.stock} onChange={(e) => setF({ ...f, stock: e.target.value })} /></div>
-            <div><label>Stock mínimo</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => setF({ ...f, stockMinimo: e.target.value })} /></div>
-          </div>
+          <CamposProducto f={f} onChange={setF} incluirStockInicial />
           {error && <p className="error small">{error}</p>}
           <button className="primary" style={{ marginTop: 10 }}>Guardar producto</button>
         </form>
@@ -185,6 +222,18 @@ function Productos({ negocio }: { negocio: Negocio }) {
       ) : (
         productos.map((p) => {
           const bajo = num(p.stock) <= num(p.stockMinimo);
+          if (editandoId === p.id) {
+            return (
+              <form key={p.id} onSubmit={guardarEdicion} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
+                <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} />
+                {error && <p className="error small">{error}</p>}
+                <div className="row" style={{ marginTop: 10 }}>
+                  <button className="primary">Guardar cambios</button>
+                  <button type="button" className="ghost" onClick={() => setEditandoId(null)}>Cancelar</button>
+                </div>
+              </form>
+            );
+          }
           return (
             <div className="list-item" key={p.id}>
               <div>
@@ -192,6 +241,7 @@ function Productos({ negocio }: { negocio: Negocio }) {
                 <span className={`badge ${bajo ? "err" : "ok"}`}>Stock: {num(p.stock)} {p.unidad}</span> <span className="muted small">· {money(p.precioVenta)}</span>
               </div>
               <div className="row">
+                <button className="ghost small" onClick={() => empezarEdicion(p)}>✎ Editar</button>
                 <button className="ghost small" onClick={() => ajustar(p, "entrada")}>+ Entrada</button>
                 <button className="ghost small" onClick={() => ajustar(p, "salida")}>− Salida</button>
               </div>

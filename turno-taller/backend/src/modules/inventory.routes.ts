@@ -1,19 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { Forbidden, NotFound } from "../lib/errors.js";
+import { NotFound } from "../lib/errors.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireAcceso } from "../lib/acceso.js";
 
 export const inventoryRouter = Router();
-
-// El negocio debe ser del usuario (el superadmin queda exento).
-async function assertDueno(negocioId: string, userId: number, rol: string) {
-  if (rol === "superadmin") return;
-  const n = await prisma.negocio.findUnique({ where: { id: negocioId }, select: { duenoId: true } });
-  if (!n) throw NotFound("Negocio no encontrado");
-  if (n.duenoId !== userId) throw Forbidden("Este negocio no es tuyo");
-}
 
 const productoSchema = z.object({
   negocioId: z.string().min(1),
@@ -26,16 +19,17 @@ const productoSchema = z.object({
   costo: z.coerce.number().min(0).optional(),
   stock: z.coerce.number().default(0),
   stockMinimo: z.coerce.number().min(0).default(0),
+  // Agro: vincula el producto a un lote biológico para atribuirle el ingreso de sus ventas.
+  loteId: z.string().min(1).nullable().optional(),
 });
 
 // Listar productos de un negocio.
 inventoryRouter.get(
   "/",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const negocioId = z.string().min(1).parse(req.query.negocioId);
-    await assertDueno(negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "inventario");
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
     const productos = await prisma.producto.findMany({
       where: {
@@ -52,15 +46,14 @@ inventoryRouter.get(
 inventoryRouter.post(
   "/",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const d = productoSchema.parse(req.body);
-    await assertDueno(d.negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "inventario");
     const producto = await prisma.producto.create({
       data: {
         negocioId: d.negocioId, nombre: d.nombre, sku: d.sku ?? null, categoria: d.categoria ?? null,
         unidad: d.unidad, precioVenta: d.precioVenta, impuestoPct: d.impuestoPct, costo: d.costo ?? null,
-        stock: d.stock, stockMinimo: d.stockMinimo,
+        stock: d.stock, stockMinimo: d.stockMinimo, loteId: d.loteId ?? null,
       },
     });
     // Movimiento inicial de stock si arranca con existencias.
@@ -75,11 +68,10 @@ inventoryRouter.post(
 inventoryRouter.patch(
   "/:id",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const p = await prisma.producto.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
     if (!p) throw NotFound("Producto no encontrado");
-    await assertDueno(p.negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario");
     const d = productoSchema.partial().omit({ negocioId: true, stock: true }).parse(req.body);
     const producto = await prisma.producto.update({ where: { id: req.params.id }, data: d });
     res.json({ producto });
@@ -95,12 +87,11 @@ const stockSchema = z.object({
 inventoryRouter.post(
   "/:id/stock",
   requireAuth,
-  requireRole("admin_negocio"),
   asyncHandler(async (req, res) => {
     const d = stockSchema.parse(req.body);
     const p = await prisma.producto.findUnique({ where: { id: req.params.id } });
     if (!p) throw NotFound("Producto no encontrado");
-    await assertDueno(p.negocioId, req.user!.sub, req.user!.rol);
+    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario");
 
     // Delta aplicado con `increment` (atómico en la BD): dos ajustes/ventas concurrentes
     // sobre el mismo producto no se pisan entre sí (evita perder movimientos de stock).

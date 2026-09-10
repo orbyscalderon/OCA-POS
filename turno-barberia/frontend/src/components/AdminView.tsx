@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, assetUrl, descargarCSV, type Negocio, type Perfil } from "../api";
+import { api, ApiError, assetUrl, descargarCSV, puedeNegocio, rolNegocioLabel, ROLES_ASIGNABLES, type Negocio, type Perfil, type RolNegocio } from "../api";
 import { useT } from "../i18n";
 import { Stat } from "./Ui";
 import { MapaUbicacion } from "./MapaUbicacion";
@@ -39,7 +39,11 @@ export function AdminView() {
             <p className="muted small">{t("own.selectHelp")}</p>
             {negocios.map((n) => (
               <div className="list-item" key={n.id}>
-                <div><h3>{n.nombreComercial}</h3><span className="muted small">{n.direccion}</span></div>
+                <div>
+                  <h3>{n.nombreComercial}</h3>
+                  <span className="muted small">{n.direccion}</span>
+                  {n.miRol && n.miRol !== "dueno" && <> · <span className="badge">{rolNegocioLabel(n.miRol)}</span></>}
+                </div>
                 <button className="primary" onClick={() => setNegocio(n)}>{t("own.manage")}</button>
               </div>
             ))}
@@ -219,6 +223,12 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
 
   const pendientes = miembros.filter((m) => m.estadoAprobacion === "pendiente");
   const equipo = miembros.filter((m) => m.estadoAprobacion === "aceptado");
+  // Rol funcional de ESTE usuario en este negocio (undefined = dueño → acceso total).
+  const miRol = negocio.miRol;
+  const esAdmin = puedeNegocio(miRol, "equipo"); // dueño o gerente: gestión de personal y equipo
+  // Cobros, suscripción, analítica y datos del negocio siguen siendo SOLO del dueño en el
+  // backend (cuentas bancarias, facturación, cancelar plan) — el frontend refleja lo mismo.
+  const esDueno = !miRol || miRol === "dueno";
 
   return (
     <div>
@@ -227,55 +237,150 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
         <button className="ghost" onClick={onVolver}>{t("common.back")}</button>
       </div>
 
-      <div className="card">
-        <div className="row spread">
-          <h2>{t("own.activeTeam")}</h2>
-          <span className={`badge ${activos >= limite ? "err" : "ok"}`}>{activos} / {limite} {t("own.professionals")}</span>
-        </div>
-        {error && <p className="error">{error}</p>}
-        {equipo.map((m) => (
-          <div className="list-item" key={m.id}>
-            <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email}</span></div>
-            <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.remove")}</button>
-          </div>
-        ))}
-        {equipo.length === 0 && <p className="muted small">{t("own.noActivePros")}</p>}
-      </div>
+      {miRol && miRol !== "dueno" && (
+        <p className="muted small">Entraste como <strong>{rolNegocioLabel(miRol)}</strong> — solo ves las secciones que tu rol permite.</p>
+      )}
 
-      <div className="card">
-        <h2>{t("own.pendingRequests")} ({pendientes.length})</h2>
-        {pendientes.map((m) => (
-          <div className="list-item" key={m.id}>
-            <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email} · {m.usuario.telefono}</span></div>
-            <div className="row">
-              <button className="primary" disabled={activos >= limite} onClick={() => decidir(m.id, "aceptado")}>{t("own.accept")}</button>
-              <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.reject")}</button>
+      {esAdmin && (
+        <>
+          <div className="card">
+            <div className="row spread">
+              <h2>{t("own.activeTeam")}</h2>
+              <span className={`badge ${activos >= limite ? "err" : "ok"}`}>{activos} / {limite} {t("own.professionals")}</span>
             </div>
+            {error && <p className="error">{error}</p>}
+            {equipo.map((m) => (
+              <div className="list-item" key={m.id}>
+                <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email}</span></div>
+                <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.remove")}</button>
+              </div>
+            ))}
+            {equipo.length === 0 && <p className="muted small">{t("own.noActivePros")}</p>}
           </div>
-        ))}
-        {pendientes.length === 0 && <p className="muted small">{t("own.noPending")}</p>}
-        {activos >= limite && pendientes.length > 0 && <p className="error">{t("own.limitReached")}</p>}
+
+          <div className="card">
+            <h2>{t("own.pendingRequests")} ({pendientes.length})</h2>
+            {pendientes.map((m) => (
+              <div className="list-item" key={m.id}>
+                <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email} · {m.usuario.telefono}</span></div>
+                <div className="row">
+                  <button className="primary" disabled={activos >= limite} onClick={() => decidir(m.id, "aceptado")}>{t("own.accept")}</button>
+                  <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.reject")}</button>
+                </div>
+              </div>
+            ))}
+            {pendientes.length === 0 && <p className="muted small">{t("own.noPending")}</p>}
+            {activos >= limite && pendientes.length > 0 && <p className="error">{t("own.limitReached")}</p>}
+          </div>
+
+          <PersonalNegocio negocioId={negocio.id} />
+        </>
+      )}
+
+      {/*
+        Módulos del motor de nicho, activados según el rubro. Solo "pos" (Comercio: vender/
+        inventario/caja) y "agro" tienen el permiso reforzado también en el backend
+        (lib/acceso.ts), así que son los únicos que el personal con rol puede abrir. El resto
+        (préstamos, mesas, taller, compras, clientes, gastos, impuestos) siguen siendo del
+        dueño únicamente en el backend — mostrarlos a personal daría una pantalla que solo
+        falla al guardar, así que quedan reservados a "esDueno" hasta que se refuerce cada uno.
+      */}
+      {modulos.includes("pos") && (puedeNegocio(miRol, "pos") || puedeNegocio(miRol, "inventario")) && <ComercioView negocio={negocio} miRol={miRol} />}
+      {modulos.includes("agro") && puedeNegocio(miRol, "agro") && <AgroView negocio={negocio} miRol={miRol} />}
+      {esDueno && modulos.includes("lending") && <PrestamosView negocio={negocio} />}
+      {esDueno && modulos.includes("tables") && <MesasView negocio={negocio} />}
+      {esDueno && modulos.includes("service_orders") && <ServiceOrdersView negocio={negocio} />}
+      {esDueno && modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
+      {esDueno && modulos.includes("customers") && <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} />}
+      {esDueno && modulos.includes("expenses") && <GastosView negocio={negocio} />}
+      {esDueno && modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}
+      {modulos.includes("storefront") && esAdmin && <TiendaLink slug={negocio.slug} />}
+      {esAdmin && <Invitacion negocioId={negocio.id} />}
+
+      {esDueno && (
+        <>
+          <Ubicacion negocio={negocio} />
+          <ImagenNegocio negocioId={negocio.id} tipo="cover" />
+          <ImagenNegocio negocioId={negocio.id} tipo="logo" />
+          <Cobros negocioId={negocio.id} />
+          <Suscripcion negocioId={negocio.id} />
+          <Analitica negocioId={negocio.id} />
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---------- Personal del negocio (roles funcionales: gerente / cajero / inventario / contador) ----------
+interface MiembroFuncional {
+  id: string; rol: RolNegocio; activo: boolean;
+  usuario: { id: number; nombre: string; email: string; telefono: string };
+}
+
+function PersonalNegocio({ negocioId }: { negocioId: string }) {
+  const [miembros, setMiembros] = useState<MiembroFuncional[]>([]);
+  const [rolInvitar, setRolInvitar] = useState<(typeof ROLES_ASIGNABLES)[number]["value"]>("cajero");
+  const [url, setUrl] = useState("");
+  const [error, setError] = useState("");
+
+  function cargar() {
+    api.get<{ miembros: MiembroFuncional[] }>(`/negocios/${negocioId}/miembros`)
+      .then((r) => setMiembros(r.miembros)).catch((e) => setError(e instanceof ApiError ? e.message : "Error"));
+  }
+  useEffect(cargar, [negocioId]);
+
+  async function invitar() {
+    setError(""); setUrl("");
+    try {
+      const r = await api.post<{ url: string }>(`/negocios/${negocioId}/invitaciones`, { rol: rolInvitar });
+      setUrl(r.url);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Error");
+    }
+  }
+
+  async function cambiarRol(m: MiembroFuncional, rol: RolNegocio) {
+    await api.patch(`/negocios/${negocioId}/miembros/${m.id}`, { rol });
+    cargar();
+  }
+
+  async function quitar(m: MiembroFuncional) {
+    if (!confirm(`¿Quitar a ${m.usuario.nombre} del equipo?`)) return;
+    await api.del(`/negocios/${negocioId}/miembros/${m.id}`);
+    cargar();
+  }
+
+  return (
+    <div className="card">
+      <h2>👥 Personal y roles</h2>
+      <p className="muted small">Invita empleados con un rol que limita qué secciones pueden usar (además del dueño).</p>
+      {error && <p className="error small">{error}</p>}
+
+      {miembros.map((m) => (
+        <div className="list-item" key={m.id}>
+          <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email}</span></div>
+          <div className="row">
+            <select value={m.rol} onChange={(e) => cambiarRol(m, e.target.value as RolNegocio)}>
+              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+            <button className="ghost small" onClick={() => quitar(m)}>Quitar</button>
+          </div>
+        </div>
+      ))}
+      {miembros.length === 0 && <p className="muted small">Sin personal invitado todavía.</p>}
+
+      <div className="row" style={{ marginTop: 10 }}>
+        <select value={rolInvitar} onChange={(e) => setRolInvitar(e.target.value as typeof rolInvitar)}>
+          {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+        </select>
+        <button className="primary" onClick={invitar}>+ Generar invitación</button>
       </div>
-
-      {/* Módulos del motor de nicho, activados según el rubro */}
-      {modulos.includes("lending") && <PrestamosView negocio={negocio} />}
-      {modulos.includes("pos") && <ComercioView negocio={negocio} />}
-      {modulos.includes("agro") && <AgroView negocio={negocio} />}
-      {modulos.includes("tables") && <MesasView negocio={negocio} />}
-      {modulos.includes("service_orders") && <ServiceOrdersView negocio={negocio} />}
-      {modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
-      {modulos.includes("customers") && <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} />}
-      {modulos.includes("expenses") && <GastosView negocio={negocio} />}
-      {modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}
-      {modulos.includes("storefront") && <TiendaLink slug={negocio.slug} />}
-
-      <Ubicacion negocio={negocio} />
-      <ImagenNegocio negocioId={negocio.id} tipo="cover" />
-      <ImagenNegocio negocioId={negocio.id} tipo="logo" />
-      <Cobros negocioId={negocio.id} />
-      <Invitacion negocioId={negocio.id} />
-      <Suscripcion negocioId={negocio.id} />
-      <Analitica negocioId={negocio.id} />
+      {url && (
+        <div className="row" style={{ marginTop: 10 }}>
+          <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
+          <button className="ghost" onClick={() => navigator.clipboard?.writeText(url)}>Copiar</button>
+        </div>
+      )}
     </div>
   );
 }

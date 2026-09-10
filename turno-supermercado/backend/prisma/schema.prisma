@@ -71,6 +71,7 @@ model Usuario {
   // Relaciones
   negociosPropios  Negocio[]           @relation("DuenoNegocio")
   membresias       PeluqueroEquipo[]
+  membresiasNegocio MiembroNegocio[]
   servicios        Servicio[]
   disponibilidades Disponibilidad[]
   bloqueosAgenda   Bloqueo[]
@@ -120,6 +121,7 @@ model Negocio {
 
   dueno        Usuario             @relation("DuenoNegocio", fields: [duenoId], references: [id], onDelete: Cascade)
   equipo       PeluqueroEquipo[]
+  miembros     MiembroNegocio[]
   invitaciones InvitacionNegocio[]
   resenas      Resena[]
   prestamos    Prestamo[]
@@ -181,7 +183,14 @@ model Gasto {
   fecha       DateTime
   createdAt   DateTime @default(now()) @map("created_at")
 
+  // Costeo por lote biológico (agro): si se asigna, el gasto cuenta para el costo
+  // de ese lote (alimento, sanidad, mano de obra…) y no solo para el gasto general.
+  loteId    String?        @map("lote_id")
+  lote      LoteBiologico? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+  tipoCosto String?        @map("tipo_costo") @db.VarChar(20) // livestock|feed|medicine|supplies|labor|utilities|transport|other
+
   @@index([negocioId])
+  @@index([loteId])
   @@map("gastos")
 }
 
@@ -220,6 +229,8 @@ model LoteBiologico {
   createdAt       DateTime       @default(now()) @map("created_at")
 
   registros RegistroAgro[]
+  gastos    Gasto[]
+  productos Producto[]
 
   @@index([negocioId])
   @@map("lotes_biologicos")
@@ -324,11 +335,17 @@ model Producto {
   activo      Boolean  @default(true)
   createdAt   DateTime @default(now()) @map("created_at")
 
+  // Agro: si el producto sale de un lote biológico (p. ej. "Pollo entero" del lote X),
+  // sus ventas se suman como ingreso de ese lote para calcular el margen real.
+  loteId String?        @map("lote_id")
+  lote   LoteBiologico? @relation(fields: [loteId], references: [id], onDelete: SetNull)
+
   movimientos MovimientoStock[]
   lineasVenta LineaVenta[]
   lineasCompra LineaCompra[]
 
   @@index([negocioId])
+  @@index([loteId])
   @@map("productos")
 }
 
@@ -450,6 +467,9 @@ model InvitacionNegocio {
   usadaPor  Int?      @map("usada_por") // usuarioId del peluquero que la usó
   usadaEn   DateTime? @map("usada_en")
   createdAt DateTime  @default(now()) @map("created_at")
+  // Si se define, al aceptar la invitación el usuario entra como miembro del negocio
+  // con este rol funcional (cajero/inventario/contador/gerente) en vez de como peluquero.
+  rolAsignado String? @map("rol_asignado") @db.VarChar(20)
 
   negocio Negocio @relation(fields: [negocioId], references: [id], onDelete: Cascade)
 
@@ -484,6 +504,25 @@ model PeluqueroEquipo {
   @@unique([negocioId, usuarioId], name: "unique_peluquero_negocio")
   @@index([negocioId, estadoAprobacion])
   @@map("peluqueros_equipos")
+}
+
+// Personal del negocio con un rol FUNCIONAL (no confundir con PeluqueroEquipo, que es
+// específico del módulo de citas). Un mismo usuario puede ser miembro de varios negocios
+// con roles distintos en cada uno. El rol determina qué secciones puede usar en el panel.
+model MiembroNegocio {
+  id        String   @id @default(cuid())
+  negocioId String   @map("negocio_id")
+  usuarioId Int      @map("usuario_id")
+  rol       String   @default("cajero") @db.VarChar(20) // gerente | cajero | inventario | contador
+  activo    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  negocio Negocio @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@unique([negocioId, usuarioId])
+  @@index([negocioId, activo])
+  @@map("miembros_negocio")
 }
 
 model Servicio {

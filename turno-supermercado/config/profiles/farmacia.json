@@ -1,0 +1,228 @@
+{
+  "$schema": "../schemas/business-profile.schema.json",
+  "profile": {
+    "slug": "farmacia",
+    "name": "Farmacia / Botica",
+    "category": "salud",
+    "icon": "pill",
+    "version": 1,
+    "primary_mode": "search_first",
+    "description": "Catálogo enorme donde todo se busca por nombre o principio activo, con trazabilidad obligatoria de lote y vencimiento."
+  },
+
+  "modules": {
+    "pos":            { "enabled": true,  "required": true, "layout": "search" },
+    "inventory":      { "enabled": true,  "variants": false, "lots": true, "expiry": true, "serials": false },
+    "credit":         { "enabled": true,  "default_kind": "open_account", "label": "Crédito y convenios" },
+    "customers":      { "enabled": true },
+    "loyalty":        { "enabled": true,  "default_program": "points" },
+    "purchasing":     { "enabled": true },
+    "expenses":       { "enabled": true },
+    "cash":           { "enabled": true },
+    "taxes":          { "enabled": true },
+    "storefront":     { "enabled": true,  "checkout_mode": "whatsapp" },
+    "appointments":   { "enabled": false },
+    "tables":         { "enabled": false },
+    "service_orders": { "enabled": false },
+    "employees":      { "enabled": true,  "commissions": true, "attendance": true },
+    "agro":           { "enabled": false },
+    "lending":        { "enabled": false }
+  },
+
+  "operation_modes": ["search_first", "quick_pos"],
+
+  "compliance": {
+    "prescription_required": {
+      "enabled": true,
+      "prompt": "Este medicamento requiere receta médica. Registre los datos de la receta antes de dispensar.",
+      "blocking": true,
+      "capture_fields": ["medico", "matricula", "fecha_receta"],
+      "applies_to_categories": ["medicamentos-controlados", "antibioticos"]
+    }
+  },
+
+  "uoms": [
+    { "code": "UND", "name": "Unidad", "dimension": "unit", "factor_to_base": 1, "is_base": true, "precision": 0 },
+    { "code": "BLISTER", "name": "Blíster", "dimension": "unit", "factor_to_base": 10, "precision": 0 },
+    { "code": "CAJA", "name": "Caja", "dimension": "unit", "factor_to_base": 30, "precision": 0 },
+    { "code": "ML", "name": "Mililitro", "dimension": "volume", "factor_to_base": 0.001, "precision": 0 },
+    { "code": "L", "name": "Litro", "dimension": "volume", "factor_to_base": 1, "is_base": true, "precision": 3 },
+    { "code": "MG", "name": "Miligramo", "dimension": "weight", "factor_to_base": 0.000001, "precision": 0 },
+    { "code": "G", "name": "Gramo", "dimension": "weight", "factor_to_base": 0.001, "precision": 2 },
+    { "code": "KG", "name": "Kilogramo", "dimension": "weight", "factor_to_base": 1, "is_base": true, "precision": 3 }
+  ],
+
+  "categories": [
+    { "slug": "medicamentos", "name": "Medicamentos de Venta Libre", "color": "#0EA5E9", "icon": "pill" },
+    { "slug": "antibioticos", "name": "Antibióticos", "color": "#DC2626", "icon": "shield" },
+    { "slug": "medicamentos-controlados", "name": "Medicamentos Controlados", "color": "#7C2D12", "icon": "lock" },
+    { "slug": "cuidado-personal", "name": "Cuidado Personal", "color": "#EC4899", "icon": "heart" },
+    { "slug": "materno-infantil", "name": "Materno Infantil", "color": "#F472B6", "icon": "baby" },
+    { "slug": "vitaminas", "name": "Vitaminas y Suplementos", "color": "#16A34A", "icon": "leaf" },
+    { "slug": "insumos-medicos", "name": "Insumos Médicos", "color": "#64748B", "icon": "stethoscope" }
+  ],
+
+  "attributes": {
+    "product": [
+      {
+        "key": "principio_activo", "label": "Principio activo", "data_type": "text",
+        "ui_widget": "text", "ui_group": "Farmacología", "is_filterable": true,
+        "show_in_pos": true, "is_required": true, "position": 10,
+        "help_text": "El buscador del POS indexa este campo: el cliente pide 'algo para el dolor', no una marca."
+      },
+      {
+        "key": "concentracion", "label": "Concentración", "data_type": "text",
+        "ui_widget": "text", "ui_group": "Farmacología", "unit_suffix": "mg/ml",
+        "is_variant_axis": true, "is_filterable": true, "show_in_pos": true,
+        "show_in_receipt": true, "semantic_role": "potency", "position": 20
+      },
+      {
+        "key": "forma_farmaceutica", "label": "Forma farmacéutica", "data_type": "enum",
+        "ui_widget": "select", "ui_group": "Farmacología", "is_filterable": true,
+        "show_in_pos": true, "position": 30,
+        "options": [
+          { "value": "tableta", "label": "Tableta" },
+          { "value": "capsula", "label": "Cápsula" },
+          { "value": "jarabe", "label": "Jarabe" },
+          { "value": "suspension", "label": "Suspensión" },
+          { "value": "inyectable", "label": "Inyectable" },
+          { "value": "crema", "label": "Crema / Ungüento" },
+          { "value": "gotas", "label": "Gotas" },
+          { "value": "supositorio", "label": "Supositorio" }
+        ]
+      },
+      {
+        "key": "laboratorio", "label": "Laboratorio", "data_type": "text",
+        "ui_widget": "text", "ui_group": "Comercial", "is_filterable": true, "position": 40
+      },
+      {
+        "key": "registro_sanitario", "label": "Registro sanitario", "data_type": "text",
+        "ui_widget": "text", "ui_group": "Regulatorio", "is_required": true, "position": 50
+      },
+      {
+        "key": "condicion_venta", "label": "Condición de venta", "data_type": "enum",
+        "ui_widget": "segmented", "ui_group": "Regulatorio", "is_filterable": true,
+        "show_in_pos": true, "position": 60,
+        "options": [
+          { "value": "libre", "label": "Venta libre" },
+          { "value": "receta", "label": "Con receta" },
+          { "value": "receta_retenida", "label": "Receta retenida" },
+          { "value": "controlado", "label": "Controlado" }
+        ],
+        "validation": { "required": true }
+      },
+      {
+        "key": "es_generico", "label": "Genérico", "data_type": "boolean",
+        "ui_widget": "toggle", "ui_group": "Comercial", "is_filterable": true, "position": 70
+      },
+      {
+        "key": "cadena_frio", "label": "Requiere cadena de frío", "data_type": "boolean",
+        "ui_widget": "toggle", "ui_group": "Manejo", "position": 80
+      }
+    ],
+    "inventory_lot": [
+      { "key": "expiry_date", "label": "Fecha de vencimiento", "data_type": "date",
+        "ui_widget": "date_picker", "semantic_role": "expiry", "is_required": true,
+        "show_in_receipt": true, "position": 10 },
+      { "key": "lote_fabricante", "label": "Lote del fabricante", "data_type": "text",
+        "ui_widget": "text", "semantic_role": "batch", "is_required": true, "position": 20 },
+      { "key": "temperatura_c", "label": "Temp. de conservación", "data_type": "number",
+        "ui_widget": "number", "unit_suffix": "°C", "position": 30 }
+    ],
+    "customer": [
+      { "key": "alergias", "label": "Alergias conocidas", "data_type": "text",
+        "ui_widget": "textarea", "position": 10 },
+      { "key": "seguro", "label": "Seguro / ARS", "data_type": "text",
+        "ui_widget": "text", "is_filterable": true, "position": 20 },
+      { "key": "numero_afiliado", "label": "Número de afiliado", "data_type": "text", "position": 30 },
+      { "key": "tratamiento_cronico", "label": "Tratamiento crónico", "data_type": "boolean",
+        "ui_widget": "toggle", "is_filterable": true, "position": 40,
+        "help_text": "Habilita el recordatorio de recompra al agotarse el tratamiento." }
+    ]
+  },
+
+  "product_defaults": {
+    "track_inventory": true,
+    "track_lots": true,
+    "track_expiry": true,
+    "track_serials": false,
+    "requires_prescription": false,
+    "allow_negative_stock": false,
+    "reorder_point": 5
+  },
+
+  "ui": {
+    "navigation": [
+      { "key": "pos",       "label": "Vender",     "icon": "search",   "route": "/pos", "primary": true },
+      { "key": "inventory", "label": "Inventario", "icon": "package",  "route": "/inventario" },
+      { "key": "vencimientos", "label": "Vencimientos", "icon": "calendar-x", "route": "/inventario/vencimientos" },
+      { "key": "customers", "label": "Clientes",   "icon": "users",    "route": "/clientes" },
+      { "key": "credit",    "label": "Crédito",    "icon": "notebook", "route": "/fiado" },
+      { "key": "compras",   "label": "Compras",    "icon": "truck",    "route": "/compras" },
+      { "key": "reports",   "label": "Reportes",   "icon": "bar-chart","route": "/reportes" }
+    ],
+    "pos": {
+      "layout": "search_first",
+      "primary_action": "search",
+      "show_product_images": false,
+      "show_stock_badge": true,
+      "variant_selector": "inline_list",
+      "variant_axes": ["concentracion"],
+      "quick_filters": ["forma_farmaceutica", "es_generico", "condicion_venta"],
+      "keypad": "numeric",
+      "allow_price_override": false,
+      "require_customer": false
+    },
+    "product_form": {
+      "groups": ["Básico", "Farmacología", "Regulatorio", "Comercial", "Manejo", "Precios"],
+      "hidden_fields": ["is_weighted", "track_serials", "age_restricted"]
+    },
+    "dashboard_widgets": [
+      "sales_today", "avg_ticket", "near_expiry", "low_stock",
+      "top_products", "gross_margin", "credit_outstanding", "chronic_refills_due"
+    ]
+  },
+
+  "receipt": {
+    "width_mm": 80,
+    "show_attributes": ["concentracion", "expiry_date"],
+    "show_lot_traceability": true,
+    "show_logo": true,
+    "footer": "Conserve este comprobante. Ante cualquier reacción adversa consulte a su médico."
+  },
+
+  "roles": [
+    { "code": "admin", "name": "Administrador", "permissions": ["*"] },
+    { "code": "dependiente", "name": "Dependiente",
+      "permissions": ["sales.create", "sales.read_own", "sales.reprint", "products.read",
+                      "customers.create", "customers.read", "credit.charge", "credit.collect",
+                      "cash.open", "cash.close", "inventory.read", "attendance.clock"],
+      "constraints": { "max_discount_pct": 5, "requires_supervisor_pin": ["sales.void", "sales.refund"] } },
+    { "code": "farmaceutico", "name": "Farmacéutico Regente",
+      "permissions": ["sales.create", "sales.read", "sales.void", "sales.refund",
+                      "products.read", "products.create", "products.update",
+                      "inventory.read", "inventory.lots", "inventory.adjust", "inventory.scrap",
+                      "reports.inventory", "customers.read", "customers.update"],
+      "constraints": { "max_discount_pct": 15 } },
+    { "code": "inventario", "name": "Inventariador",
+      "permissions": ["products.read", "inventory.read", "inventory.receive", "inventory.count",
+                      "inventory.lots", "purchasing.read", "purchasing.receive", "reports.inventory"] },
+    { "code": "contador", "name": "Contador",
+      "permissions": ["reports.sales", "reports.finance", "reports.credit", "reports.export",
+                      "finance.read", "taxes.read", "taxes.issue", "expenses.read", "credit.read"] }
+  ],
+
+  "automations": [
+    { "key": "expiry_alert",        "enabled": true, "config": { "days_before": [90, 60, 30, 15] } },
+    { "key": "low_stock_alert",     "enabled": true, "config": { "channel": "whatsapp", "threshold_source": "reorder_point" } },
+    { "key": "chronic_refill",      "enabled": true, "config": { "days_before_runout": 5, "channel": "whatsapp" } },
+    { "key": "collection_reminder", "enabled": true, "config": { "offsets_days": [-2, 5, 15], "channel": "whatsapp" } },
+    { "key": "loyalty_points",      "enabled": true, "config": { "earn_per_currency": 1, "redeem_value": 0.03 } },
+    { "key": "restock_forecast",    "enabled": true, "config": { "model": "moving_avg_28d" } }
+  ],
+
+  "reports": [
+    "near_expiry", "expired_losses", "sales_by_laboratory", "generic_vs_brand",
+    "controlled_substances_log", "margin_by_category", "credit_aging", "chronic_patients"
+  ]
+}

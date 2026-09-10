@@ -1,0 +1,110 @@
+name: Modelo de datos
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  # ===================================================================
+  # 1 · Manifiestos de nicho, semillas derivadas y esquema sobre PGlite
+  #     Sin servicios ni contenedores: PGlite es PostgreSQL en WASM.
+  #     Es el job rápido — falla en ~40 s si algo está roto.
+  # ===================================================================
+  schema-fast:
+    name: Config + esquema (PGlite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+
+      - name: Validar manifiestos de perfil
+        run: npm run validate:profiles
+
+      - name: Regenerar semillas derivadas
+        run: npm run seeds:generate
+
+      # Si el JSON cambió y nadie regeneró el SQL, el diff no queda limpio.
+      # Evita que la base se siembre con un catálogo desactualizado.
+      - name: Verificar que las semillas generadas están al día
+        run: |
+          if ! git diff --exit-code -- db/seeds/*.generated.sql; then
+            echo "::error::Las semillas generadas están desactualizadas."
+            echo "Ejecuta 'npm run seeds:generate' y commitea el resultado."
+            exit 1
+          fi
+
+      - name: Aplicar esquema y correr la suite completa
+        run: npm run db:test
+
+  # ===================================================================
+  # 2 · La misma suite sobre PostgreSQL nativo.
+  #     PGlite corre PostgreSQL 18; la versión objetivo declarada es 15+.
+  #     Este job es el que garantiza que el DDL no dependa de nada
+  #     posterior a 16.
+  # ===================================================================
+  schema-postgres:
+    name: Esquema y tests (PostgreSQL ${{ matrix.pg }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        pg: ['15', '16', '17']
+
+    services:
+      postgres:
+        image: postgres:${{ matrix.pg }}-alpine
+        env:
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ocpos_ci
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+        ports: ['5432:5432']
+
+    env:
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: ci
+      PGDATABASE: ocpos_ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar cliente psql
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
+      # run_tests.sql aplica el esquema, las semillas y las 105 aserciones.
+      # Cualquier fallo aborta con el nombre del caso que lo produjo.
+      - name: Aplicar esquema, semillas y suite de tests
+        run: psql -v ON_ERROR_STOP=1 -f db/tests/run_tests.sql
+
+      # --------------------------------------------------------------
+      # Barrera de aislamiento multi-tenant, verificada además de forma
+      # independiente al harness: una tabla con tenant_id sin RLS forzado
+      # es una fuga entre negocios.
+      # --------------------------------------------------------------
+      - name: Cobertura de RLS
+        run: |
+          MISSING=$(psql -tAc "SELECT count(*) FROM app.v_rls_coverage WHERE NOT (rls_enabled AND rls_forced AND has_policy);")
+          echo "Tablas con tenant_id sin RLS forzado: $MISSING"
+          if [ "$MISSING" != "0" ]; then
+            psql -c "SELECT * FROM app.v_rls_coverage WHERE NOT (rls_enabled AND rls_forced AND has_policy);"
+            echo "::error::Hay tablas con tenant_id sin RLS forzado."
+            exit 1
+          fi
+
+      - name: Resumen de objetos creados
+        if: always()
+        run: |
+          psql -c "SELECT table_schema, count(*) AS tablas
+                     FROM information_schema.tables
+                    WHERE table_schema IN ('app','platform','archive')
+                      AND table_type = 'BASE TABLE'
+                    GROUP BY 1 ORDER BY 1;"

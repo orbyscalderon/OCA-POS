@@ -1,0 +1,136 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Usuarios ─────────────────────────────────────────────────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  nombre       String
+  telefono     String
+  email        String   @unique
+  passwordHash String
+  rol          Rol      @default(CLIENTE)
+  createdAt    DateTime @default(now())
+  orders       Order[]
+}
+
+enum Rol {
+  CLIENTE
+  CAJERO
+  ADMIN
+}
+
+// ─── Catálogo ─────────────────────────────────────────────────────────────────
+
+model Category {
+  id       String    @id @default(cuid())
+  nombre   String    @unique
+  slug     String    @unique
+  orden    Int       @default(0)
+  products Product[]
+}
+
+model Product {
+  id          String     @id @default(cuid())
+  nombre      String
+  descripcion String?
+  // Precio en centavos de DOP para evitar errores de flotante (ej: RD$150.50 → 15050)
+  precioCentavos Int
+  itbisRate   ItbisRate  @default(DIECIOCHO)
+  codigoBarras String?   @unique  // EAN-13, UPC-A, código interno, etc.
+  stock       Int        @default(0)
+  agotado     Boolean    @default(false)
+  imagenUrl   String?
+  activo      Boolean    @default(true)
+  categoriaId String
+  categoria   Category   @relation(fields: [categoriaId], references: [id])
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  orderItems  OrderItem[]
+}
+
+enum ItbisRate {
+  EXENTO       // 0%
+  DIECISEIS    // 16%
+  DIECIOCHO    // 18%
+}
+
+// ─── Órdenes ──────────────────────────────────────────────────────────────────
+
+model Order {
+  id             String        @id @default(cuid())
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id])
+  // Nombre e info del cliente (para órdenes sin cuenta)
+  clienteNombre  String
+  clienteTelefono String
+  clienteEmail   String
+
+  // Montos en centavos de DOP
+  subtotalCentavos  Int
+  itbisCentavos     Int
+  totalCentavos     Int
+
+  status         OrderStatus   @default(PENDIENTE)
+  deliveryType   DeliveryType
+  address        String?       // Dirección de entrega (solo si es DELIVERY)
+  addressLat     Float?
+  addressLng     Float?
+  notas          String?
+
+  // Azul (solo ventas online)
+  azulOrderNumber  String?     @unique
+  azulAuthorizationCode String?
+  azulRRN          String?
+
+  // POS (ventas en caja física)
+  origen           OrigenVenta  @default(ONLINE)
+  metodoPago       MetodoPago?  // Solo relevante para ventas POS
+  cajeroId         String?      // Usuario cajero que procesó la venta
+
+  items          OrderItem[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+enum OrigenVenta {
+  ONLINE
+  POS
+}
+
+enum MetodoPago {
+  EFECTIVO
+  TARJETA
+}
+
+enum OrderStatus {
+  PENDIENTE    // Creada, esperando pago
+  PAGADA       // Confirmada por postback de Azul
+  PREPARANDO   // Tienda preparando el pedido
+  ENVIADA      // En camino (delivery)
+  LISTA        // Lista para recogida (pickup)
+  COMPLETADA   // Entregada al cliente
+  CANCELADA
+}
+
+enum DeliveryType {
+  DELIVERY
+  PICKUP
+}
+
+model OrderItem {
+  id               String  @id @default(cuid())
+  orderId          String
+  order            Order   @relation(fields: [orderId], references: [id])
+  productId        String
+  product          Product @relation(fields: [productId], references: [id])
+  cantidad         Int
+  precioCentavos   Int     // Precio unitario al momento de la compra
+  itbisRate        ItbisRate
+}

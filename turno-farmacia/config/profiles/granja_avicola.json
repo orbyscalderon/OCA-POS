@@ -1,0 +1,372 @@
+{
+  "$schema": "../schemas/business-profile.schema.json",
+  "profile": {
+    "slug": "granja_avicola",
+    "name": "Granja Avícola",
+    "category": "agro",
+    "icon": "egg",
+    "version": 1,
+    "primary_mode": "biological_lots",
+    "description": "Producción pecuaria por lote/camada con mortalidad, conversión alimenticia, faena o recolección diaria y costeo real por kg producido."
+  },
+
+  "modules": {
+    "pos":            { "enabled": true,  "required": true, "layout": "weight_first" },
+    "inventory":      { "enabled": true,  "variants": false, "lots": true, "expiry": true, "serials": false },
+    "credit":         { "enabled": true,  "default_kind": "open_account", "label": "Fiado a colmados" },
+    "customers":      { "enabled": true },
+    "loyalty":        { "enabled": false },
+    "purchasing":     { "enabled": true,  "multi_uom": true },
+    "expenses":       { "enabled": true,  "cost_center": "biological_lot" },
+    "cash":           { "enabled": true },
+    "taxes":          { "enabled": true },
+    "storefront":     { "enabled": true,  "checkout_mode": "whatsapp" },
+    "appointments":   { "enabled": false },
+    "tables":         { "enabled": false },
+    "service_orders": { "enabled": false },
+    "employees":      { "enabled": true,  "commissions": false, "attendance": true },
+    "agro":           {
+      "enabled": true,
+      "species": ["broiler", "layer"],
+      "production_kinds": ["meat", "eggs"],
+      "daily_record": true,
+      "harvest": true,
+      "health_schedule": true,
+      "cost_allocation": "by_weight"
+    },
+    "lending":        { "enabled": false }
+  },
+
+  "operation_modes": ["biological_lots", "quick_pos"],
+
+  "uoms": [
+    { "code": "UND", "name": "Unidad", "dimension": "unit", "factor_to_base": 1, "is_base": true, "precision": 0 },
+    { "code": "DOC", "name": "Docena", "dimension": "unit", "factor_to_base": 12, "precision": 0 },
+    { "code": "CARTON", "name": "Cartón (30 huevos)", "dimension": "unit", "factor_to_base": 30, "precision": 0 },
+    { "code": "CUBETA", "name": "Cubeta (30 huevos)", "dimension": "unit", "factor_to_base": 30, "precision": 0 },
+    { "code": "KG", "name": "Kilogramo", "dimension": "weight", "factor_to_base": 1, "is_base": true, "precision": 3 },
+    { "code": "G", "name": "Gramo", "dimension": "weight", "factor_to_base": 0.001, "precision": 0 },
+    { "code": "LB", "name": "Libra", "dimension": "weight", "factor_to_base": 0.45359237, "precision": 2 },
+    { "code": "QQ", "name": "Quintal", "dimension": "weight", "factor_to_base": 46.0, "precision": 2 },
+    { "code": "SACO", "name": "Saco de alimento", "dimension": "weight", "factor_to_base": 45.36, "precision": 2 },
+    { "code": "TON", "name": "Tonelada", "dimension": "weight", "factor_to_base": 1000, "precision": 3 }
+  ],
+
+  "uom_policy": {
+    "purchase_default": "TON",
+    "consumption_default": "KG",
+    "sale_defaults": { "carne": "LB", "huevos": "CARTON", "gallinaza": "SACO" },
+    "scale_integration": {
+      "enabled": true,
+      "protocols": ["cas_ap", "toledo_continuous", "generic_serial"],
+      "barcode_rules": [
+        { "prefix": "20", "code_start": 3, "code_len": 5, "value_start": 8, "value_len": 5,
+          "value_kind": "weight_g", "value_decimals": 0 }
+      ]
+    }
+  },
+
+  "categories": [
+    { "slug": "aves-vivas", "name": "Aves Vivas", "color": "#F59E0B", "icon": "bird" },
+    { "slug": "carne", "name": "Carne Procesada", "color": "#EF4444", "icon": "drumstick" },
+    { "slug": "huevos", "name": "Huevos", "color": "#FBBF24", "icon": "egg" },
+    { "slug": "subproductos", "name": "Subproductos", "color": "#78716C", "icon": "recycle" },
+    { "slug": "alimento", "name": "Alimento Balanceado", "color": "#84CC16", "icon": "wheat", "purchasable_only": true },
+    { "slug": "sanidad", "name": "Vacunas y Medicamentos", "color": "#06B6D4", "icon": "syringe", "purchasable_only": true },
+    { "slug": "insumos", "name": "Insumos de Galpón", "color": "#64748B", "icon": "package", "purchasable_only": true }
+  ],
+
+  "attributes": {
+    "product": [
+      {
+        "key": "especie", "label": "Especie", "data_type": "enum", "ui_widget": "select",
+        "ui_group": "Producción", "is_filterable": true, "position": 10,
+        "options": [
+          { "value": "broiler", "label": "Pollo de engorde" },
+          { "value": "layer", "label": "Gallina ponedora" },
+          { "value": "breeder", "label": "Reproductora" }
+        ]
+      },
+      {
+        "key": "presentacion", "label": "Presentación", "data_type": "enum",
+        "ui_widget": "chips", "ui_group": "Producción", "is_variant_axis": true,
+        "is_filterable": true, "show_in_pos": true, "position": 20,
+        "options": [
+          { "value": "entero", "label": "Entero" },
+          { "value": "pechuga", "label": "Pechuga" },
+          { "value": "muslo", "label": "Muslo/Encuentro" },
+          { "value": "ala", "label": "Alas" },
+          { "value": "menudencia", "label": "Menudencia" }
+        ],
+        "applies_to_categories": ["carne"]
+      },
+      {
+        "key": "clase_huevo", "label": "Clasificación", "data_type": "enum",
+        "ui_widget": "segmented", "ui_group": "Producción", "is_variant_axis": true,
+        "show_in_pos": true, "position": 30,
+        "options": [
+          { "value": "AAA", "label": "AAA (Jumbo)" },
+          { "value": "AA", "label": "AA (Extra)" },
+          { "value": "A", "label": "A (Grande)" },
+          { "value": "B", "label": "B (Mediano)" },
+          { "value": "sucio", "label": "Sucio / 2da" }
+        ],
+        "applies_to_categories": ["huevos"]
+      },
+      {
+        "key": "etapa_alimento", "label": "Etapa del alimento", "data_type": "enum",
+        "ui_widget": "select", "ui_group": "Nutrición", "position": 40,
+        "options": [
+          { "value": "preiniciador", "label": "Preiniciador (0-10 d)" },
+          { "value": "iniciador", "label": "Iniciador (11-24 d)" },
+          { "value": "engorde", "label": "Engorde (25-35 d)" },
+          { "value": "finalizador", "label": "Finalizador (36+ d)" },
+          { "value": "postura", "label": "Postura" }
+        ],
+        "applies_to_categories": ["alimento"]
+      },
+      {
+        "key": "proteina_pct", "label": "Proteína", "data_type": "number",
+        "ui_widget": "number", "ui_group": "Nutrición", "unit_suffix": "%",
+        "position": 50, "applies_to_categories": ["alimento"]
+      },
+      {
+        "key": "registro_sanitario", "label": "Registro sanitario", "data_type": "text",
+        "ui_widget": "text", "ui_group": "Sanidad", "position": 60,
+        "validation": { "required": true },
+        "applies_to_categories": ["sanidad"]
+      },
+      {
+        "key": "periodo_retiro_dias", "label": "Período de retiro", "data_type": "integer",
+        "ui_widget": "number", "ui_group": "Sanidad", "unit_suffix": "días",
+        "help_text": "Días que deben pasar tras aplicar el medicamento antes de faenar.",
+        "position": 70, "applies_to_categories": ["sanidad"]
+      }
+    ],
+    "inventory_lot": [
+      { "key": "expiry_date", "label": "Fecha de vencimiento", "data_type": "date",
+        "ui_widget": "date_picker", "semantic_role": "expiry", "is_required": true, "position": 10 },
+      { "key": "temperatura_c", "label": "Temp. de conservación", "data_type": "number",
+        "ui_widget": "number", "unit_suffix": "°C", "position": 20 }
+    ],
+    "biological_lot": [
+      {
+        "key": "galpon", "label": "Galpón", "data_type": "uuid_ref", "ui_widget": "select",
+        "ui_group": "Ubicación", "is_required": true, "is_filterable": true, "position": 10,
+        "ref_entity": "farm_unit"
+      },
+      {
+        "key": "linea_genetica", "label": "Línea genética", "data_type": "enum",
+        "ui_widget": "select", "ui_group": "Origen", "position": 20,
+        "options": [
+          { "value": "cobb_500", "label": "Cobb 500" },
+          { "value": "ross_308", "label": "Ross 308" },
+          { "value": "hy_line_brown", "label": "Hy-Line Brown" },
+          { "value": "lohmann", "label": "Lohmann LSL" }
+        ]
+      },
+      {
+        "key": "sexado", "label": "Sexado", "data_type": "enum", "ui_widget": "segmented",
+        "ui_group": "Origen", "position": 30,
+        "options": [
+          { "value": "mixto", "label": "Mixto" },
+          { "value": "macho", "label": "Machos" },
+          { "value": "hembra", "label": "Hembras" }
+        ]
+      },
+      {
+        "key": "tipo_cama", "label": "Tipo de cama", "data_type": "enum", "ui_widget": "select",
+        "ui_group": "Manejo", "position": 40,
+        "options": [
+          { "value": "viruta", "label": "Viruta de madera" },
+          { "value": "cascarilla", "label": "Cascarilla de arroz" },
+          { "value": "reutilizada", "label": "Cama reutilizada" }
+        ]
+      },
+      {
+        "key": "densidad_aves_m2", "label": "Densidad", "data_type": "number",
+        "ui_widget": "number", "ui_group": "Manejo", "unit_suffix": "aves/m²", "position": 50
+      }
+    ],
+    "biological_daily": [
+      { "key": "temperatura_min_c", "label": "Temp. mínima", "data_type": "number", "unit_suffix": "°C", "position": 10 },
+      { "key": "temperatura_max_c", "label": "Temp. máxima", "data_type": "number", "unit_suffix": "°C", "position": 20 },
+      { "key": "consumo_agua_l", "label": "Consumo de agua", "data_type": "number", "unit_suffix": "L", "position": 30 },
+      { "key": "observacion_sanitaria", "label": "Observación sanitaria", "data_type": "text", "ui_widget": "textarea", "position": 40 }
+    ],
+    "customer": [
+      { "key": "tipo_comprador", "label": "Tipo de comprador", "data_type": "enum",
+        "ui_widget": "select", "is_filterable": true, "position": 10,
+        "options": [
+          { "value": "colmado", "label": "Colmado" },
+          { "value": "supermercado", "label": "Supermercado" },
+          { "value": "restaurante", "label": "Restaurante" },
+          { "value": "mayorista", "label": "Distribuidor mayorista" },
+          { "value": "final", "label": "Consumidor final" }
+        ] },
+      { "key": "ruta", "label": "Ruta de entrega", "data_type": "text", "is_filterable": true, "position": 20 }
+    ]
+  },
+
+  "product_defaults": {
+    "track_inventory": true,
+    "track_lots": true,
+    "track_expiry": true,
+    "track_serials": false,
+    "is_weighted": true,
+    "allow_negative_stock": false
+  },
+
+  "agro": {
+    "lot_code_pattern": "{especie}-{galpon}-{YYYY}{MM}",
+    "cost_types": [
+      { "code": "livestock",  "label": "Pollitos BB",           "capitalizable": true },
+      { "code": "feed",       "label": "Alimento balanceado",   "capitalizable": true },
+      { "code": "medicine",   "label": "Vacunas y medicamentos","capitalizable": true },
+      { "code": "supplies",   "label": "Cama, gas, desinfectante", "capitalizable": true },
+      { "code": "labor",      "label": "Mano de obra",          "capitalizable": true },
+      { "code": "utilities",  "label": "Electricidad y agua",   "capitalizable": true },
+      { "code": "transport",  "label": "Transporte",            "capitalizable": true },
+      { "code": "depreciation","label": "Depreciación de galpón","capitalizable": true }
+    ],
+    "daily_record_fields": [
+      "qty_dead", "qty_culled", "death_causes", "feed_qty",
+      "avg_weight_g", "water_liters", "output_qty", "output_grade",
+      "temperature_c", "humidity_pct"
+    ],
+    "death_causes": [
+      "ascitis", "muerte_subita", "aplastamiento", "onfalitis",
+      "coccidiosis", "problema_locomotor", "depredador", "descarte_sanitario", "otro"
+    ],
+    "harvest": {
+      "kinds": ["slaughter", "egg_collection", "partial"],
+      "default_allocation": "by_weight",
+      "outputs_template": [
+        { "category": "carne", "presentacion": "entero",     "expected_yield_pct": 74.0 },
+        { "category": "subproductos", "presentacion": "menudencia", "expected_yield_pct": 6.0, "is_byproduct": true },
+        { "category": "subproductos", "presentacion": "gallinaza",  "expected_yield_pct": 0,   "is_byproduct": true }
+      ]
+    },
+    "benchmarks": {
+      "broiler": {
+        "target_fcr": 1.65,
+        "max_mortality_pct": 5.0,
+        "target_weight_g_day35": 2400,
+        "standard_curve_ref": "cobb500_2022"
+      },
+      "layer": {
+        "target_laying_pct": 92.0,
+        "max_mortality_pct_month": 0.8,
+        "target_fcr_per_dozen": 1.45
+      }
+    },
+    "health_schedule_template": [
+      { "day_offset": 1,  "task_type": "vaccine",    "name": "Marek + Bronquitis (aspersión)" },
+      { "day_offset": 7,  "task_type": "vaccine",    "name": "Newcastle B1 (ocular)" },
+      { "day_offset": 10, "task_type": "feed_change","name": "Cambio a Iniciador" },
+      { "day_offset": 14, "task_type": "vaccine",    "name": "Gumboro" },
+      { "day_offset": 21, "task_type": "vaccine",    "name": "Newcastle refuerzo" },
+      { "day_offset": 24, "task_type": "feed_change","name": "Cambio a Engorde" },
+      { "day_offset": 7,  "task_type": "weighing",   "name": "Pesaje semanal", "repeat_every_days": 7 },
+      { "day_offset": 35, "task_type": "harvest",    "name": "Faena programada" }
+    ]
+  },
+
+  "ui": {
+    "navigation": [
+      { "key": "agro",       "label": "Mis Lotes",   "icon": "bird",         "route": "/lotes", "primary": true },
+      { "key": "daily",      "label": "Registro Diario", "icon": "clipboard","route": "/lotes/diario" },
+      { "key": "pos",        "label": "Vender",      "icon": "shopping-cart","route": "/pos" },
+      { "key": "inventory",  "label": "Insumos",     "icon": "package",      "route": "/inventario" },
+      { "key": "credit",     "label": "Fiado",       "icon": "notebook",     "route": "/fiado" },
+      { "key": "costing",    "label": "Costos",      "icon": "calculator",   "route": "/costos" },
+      { "key": "reports",    "label": "Reportes",    "icon": "bar-chart",    "route": "/reportes" }
+    ],
+    "pos": {
+      "layout": "weight_first",
+      "primary_action": "scale",
+      "show_product_images": false,
+      "show_stock_badge": true,
+      "variant_selector": "inline_list",
+      "variant_axes": ["presentacion", "clase_huevo"],
+      "quick_filters": ["presentacion", "clase_huevo"],
+      "keypad": "weight",
+      "allow_price_override": true,
+      "price_override_permission": "sales.price_override",
+      "require_customer": true,
+      "default_uom_selector": true
+    },
+    "product_form": {
+      "groups": ["Básico", "Producción", "Nutrición", "Sanidad", "Precios", "Unidades"],
+      "hidden_fields": ["age_restricted", "requires_prescription"]
+    },
+    "agro_daily_form": {
+      "layout": "single_column_large_touch",
+      "offline_first": true,
+      "sections": [
+        { "title": "Bajas",      "fields": ["qty_dead", "qty_culled", "death_causes"] },
+        { "title": "Alimento",   "fields": ["feed_variant_id", "feed_qty"] },
+        { "title": "Producción", "fields": ["output_qty", "output_grade"] },
+        { "title": "Ambiente",   "fields": ["temperature_c", "humidity_pct", "water_liters"] },
+        { "title": "Pesaje",     "fields": ["avg_weight_g", "uniformity_pct"] }
+      ]
+    },
+    "dashboard_widgets": [
+      "active_lots", "mortality_curve", "fcr_vs_target", "cost_per_kg",
+      "feed_stock_days", "upcoming_health_tasks", "sales_today", "credit_outstanding"
+    ]
+  },
+
+  "receipt": {
+    "width_mm": 80,
+    "show_attributes": ["presentacion", "clase_huevo"],
+    "show_weight_detail": true,
+    "footer": "Producto perecedero. Conservar refrigerado entre 0°C y 4°C.",
+    "show_lot_traceability": true
+  },
+
+  "roles": [
+    { "code": "admin",      "name": "Administrador", "permissions": ["*"] },
+    { "code": "galponero",  "name": "Galponero",
+      "permissions": ["agro.daily_record.create", "agro.lots.read", "agro.schedule.complete",
+                      "inventory.consume", "attendance.clock"],
+      "constraints": { "scope": "assigned_farm_units_only" } },
+    { "code": "veterinario","name": "Veterinario/Técnico",
+      "permissions": ["agro.*", "inventory.read", "reports.agro", "products.read"],
+      "constraints": { "requires_supervisor_pin": ["agro.lot.close"] } },
+    { "code": "cajero",     "name": "Cajero",
+      "permissions": ["sales.create", "sales.read", "customers.*", "credit.charge",
+                      "credit.collect", "cash.open", "cash.close"],
+      "constraints": { "max_discount_pct": 5 } },
+    { "code": "contador",   "name": "Contador",
+      "permissions": ["reports.*", "finance.read", "taxes.*", "expenses.*", "credit.read", "agro.costing.read"] }
+  ],
+
+  "automations": [
+    { "key": "high_mortality_alert", "enabled": true,
+      "config": { "daily_pct_threshold": 0.5, "cumulative_pct_threshold": 5, "channel": "whatsapp" } },
+    { "key": "fcr_deviation_alert",  "enabled": true,
+      "config": { "deviation_pct": 8, "compare_to": "benchmarks.broiler.target_fcr" } },
+    { "key": "feed_stock_alert",     "enabled": true,
+      "config": { "days_of_cover_min": 3, "channel": "whatsapp" } },
+    { "key": "health_task_reminder", "enabled": true,
+      "config": { "offsets_days": [-1, 0], "channel": "push" } },
+    { "key": "missing_daily_record", "enabled": true,
+      "config": { "hour_local": 19, "channel": "whatsapp" } },
+    { "key": "collection_reminder",  "enabled": true,
+      "config": { "offsets_days": [-2, 1, 7], "channel": "whatsapp" } },
+    { "key": "expiry_alert",         "enabled": true,
+      "config": { "days_before": [7, 3, 1] } }
+  ],
+
+  "reports": [
+    "lot_closeout",
+    "mortality_by_cause",
+    "fcr_by_lot",
+    "cost_per_kg_produced",
+    "laying_percentage",
+    "feed_consumption_vs_standard",
+    "margin_by_channel",
+    "credit_aging"
+  ]
+}

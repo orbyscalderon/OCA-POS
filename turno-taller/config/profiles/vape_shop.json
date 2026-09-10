@@ -1,0 +1,226 @@
+{
+  "$schema": "../schemas/business-profile.schema.json",
+  "profile": {
+    "slug": "vape_shop",
+    "name": "Tienda de Vapes",
+    "category": "retail",
+    "icon": "cloud",
+    "version": 1,
+    "primary_mode": "variant_inventory",
+    "description": "Retail con alta variabilidad de SKU por sabor y nicotina, control de edad y garantía de dispositivos."
+  },
+
+  "modules": {
+    "pos":            { "enabled": true,  "required": true },
+    "inventory":      { "enabled": true,  "variants": true, "lots": false, "expiry": false, "serials": true },
+    "credit":         { "enabled": true,  "default_kind": "open_account" },
+    "customers":      { "enabled": true },
+    "loyalty":        { "enabled": true,  "default_program": "points" },
+    "purchasing":     { "enabled": true },
+    "expenses":       { "enabled": true },
+    "cash":           { "enabled": true },
+    "taxes":          { "enabled": true },
+    "storefront":     { "enabled": true,  "checkout_mode": "whatsapp" },
+    "appointments":   { "enabled": false },
+    "tables":         { "enabled": false },
+    "service_orders": { "enabled": true,  "label": "Garantías y RMA" },
+    "employees":      { "enabled": true,  "commissions": true, "attendance": false },
+    "agro":           { "enabled": false },
+    "lending":        { "enabled": false }
+  },
+
+  "operation_modes": ["variant_inventory", "quick_pos"],
+
+  "compliance": {
+    "age_verification": {
+      "enabled": true,
+      "min_age": 18,
+      "prompt": "Verificar identificación: producto restringido para mayores de 18 años.",
+      "blocking": true,
+      "applies_to_categories": ["desechables", "liquidos", "dispositivos"]
+    }
+  },
+
+  "uoms": [
+    { "code": "UND", "name": "Unidad", "dimension": "unit", "factor_to_base": 1, "is_base": true, "precision": 0 },
+    { "code": "CAJA", "name": "Caja", "dimension": "unit", "factor_to_base": 10, "precision": 0 },
+    { "code": "ML", "name": "Mililitro", "dimension": "volume", "factor_to_base": 0.001, "precision": 0 },
+    { "code": "L", "name": "Litro", "dimension": "volume", "factor_to_base": 1, "is_base": true, "precision": 3 }
+  ],
+
+  "categories": [
+    { "slug": "desechables", "name": "Vapes Desechables", "color": "#8B5CF6", "icon": "wind" },
+    { "slug": "liquidos", "name": "E-Líquidos", "color": "#06B6D4", "icon": "droplet" },
+    { "slug": "dispositivos", "name": "Dispositivos y Mods", "color": "#F59E0B", "icon": "battery" },
+    { "slug": "resistencias", "name": "Resistencias y Coils", "color": "#EF4444", "icon": "zap" },
+    { "slug": "accesorios", "name": "Accesorios", "color": "#64748B", "icon": "package" }
+  ],
+
+  "attributes": {
+    "product": [
+      {
+        "key": "flavor", "label": "Sabor", "data_type": "enum", "ui_widget": "chips",
+        "ui_group": "Características", "is_variant_axis": true, "is_filterable": true,
+        "show_in_pos": true, "show_in_receipt": true, "position": 10,
+        "options": [
+          { "value": "mango_ice", "label": "Mango Ice" },
+          { "value": "blue_razz", "label": "Blue Razz" },
+          { "value": "mint", "label": "Menta" },
+          { "value": "strawberry_kiwi", "label": "Fresa Kiwi" },
+          { "value": "tobacco", "label": "Tabaco" },
+          { "value": "watermelon", "label": "Sandía" }
+        ],
+        "validation": { "required": true },
+        "applies_to_categories": ["desechables", "liquidos"]
+      },
+      {
+        "key": "nicotine_mg", "label": "Nivel de nicotina", "data_type": "enum",
+        "ui_widget": "segmented", "ui_group": "Características", "unit_suffix": "mg",
+        "is_variant_axis": true, "is_filterable": true, "show_in_pos": true,
+        "semantic_role": "potency", "position": 20,
+        "options": [
+          { "value": "0", "label": "0 mg (Sin nicotina)" },
+          { "value": "3", "label": "3 mg" },
+          { "value": "6", "label": "6 mg" },
+          { "value": "20", "label": "20 mg" },
+          { "value": "50", "label": "50 mg (5%)" }
+        ],
+        "validation": { "required": true },
+        "applies_to_categories": ["desechables", "liquidos"]
+      },
+      {
+        "key": "puffs", "label": "Puffs (caladas)", "data_type": "integer",
+        "ui_widget": "number", "ui_group": "Características", "unit_suffix": "puffs",
+        "is_filterable": true, "show_in_pos": true, "position": 30,
+        "validation": { "min": 100, "max": 50000 },
+        "applies_to_categories": ["desechables"]
+      },
+      {
+        "key": "volume_ml", "label": "Volumen", "data_type": "number",
+        "ui_widget": "number", "ui_group": "Características", "unit_suffix": "ml",
+        "is_filterable": true, "position": 40,
+        "validation": { "min": 0.5, "max": 200 },
+        "applies_to_categories": ["desechables", "liquidos"]
+      },
+      {
+        "key": "vg_pg_ratio", "label": "Ratio VG/PG", "data_type": "enum",
+        "ui_widget": "select", "ui_group": "Características", "position": 50,
+        "options": [
+          { "value": "50_50", "label": "50/50" },
+          { "value": "70_30", "label": "70/30" },
+          { "value": "80_20", "label": "80/20" }
+        ],
+        "applies_to_categories": ["liquidos"]
+      },
+      {
+        "key": "battery_mah", "label": "Batería", "data_type": "integer",
+        "ui_widget": "number", "ui_group": "Especificaciones", "unit_suffix": "mAh",
+        "position": 60,
+        "applies_to_categories": ["desechables", "dispositivos"]
+      },
+      {
+        "key": "resistance_ohm", "label": "Resistencia", "data_type": "number",
+        "ui_widget": "number", "ui_group": "Especificaciones", "unit_suffix": "Ω",
+        "position": 70,
+        "applies_to_categories": ["resistencias", "dispositivos"]
+      },
+      {
+        "key": "warranty_days", "label": "Garantía", "data_type": "integer",
+        "ui_widget": "number", "ui_group": "Comercial", "unit_suffix": "días",
+        "semantic_role": "warranty", "default_value": 30, "position": 80,
+        "applies_to_categories": ["dispositivos"]
+      }
+    ],
+    "customer": [
+      {
+        "key": "preferred_flavor", "label": "Sabor preferido", "data_type": "multi_enum",
+        "ui_widget": "chips", "is_filterable": true, "position": 10,
+        "options": [
+          { "value": "mango_ice", "label": "Mango Ice" },
+          { "value": "blue_razz", "label": "Blue Razz" },
+          { "value": "mint", "label": "Menta" },
+          { "value": "strawberry_kiwi", "label": "Fresa Kiwi" },
+          { "value": "tobacco", "label": "Tabaco" },
+          { "value": "watermelon", "label": "Sandía" }
+        ]
+      },
+      {
+        "key": "id_verified_at", "label": "Identificación verificada", "data_type": "date",
+        "ui_widget": "date_picker", "position": 20
+      }
+    ]
+  },
+
+  "product_defaults": {
+    "track_inventory": true,
+    "track_lots": false,
+    "track_expiry": false,
+    "track_serials": false,
+    "age_restricted": true,
+    "reorder_point": 5
+  },
+
+  "ui": {
+    "navigation": [
+      { "key": "pos",        "label": "Vender",     "icon": "shopping-cart", "route": "/pos",        "primary": true },
+      { "key": "inventory",  "label": "Inventario", "icon": "package",       "route": "/inventario" },
+      { "key": "credit",     "label": "Fiado",      "icon": "notebook",      "route": "/fiado" },
+      { "key": "customers",  "label": "Clientes",   "icon": "users",         "route": "/clientes" },
+      { "key": "reports",    "label": "Reportes",   "icon": "bar-chart",     "route": "/reportes" },
+      { "key": "storefront", "label": "Mi Tienda",  "icon": "globe",         "route": "/tienda" }
+    ],
+    "pos": {
+      "layout": "grid_with_images",
+      "primary_action": "scan",
+      "show_product_images": true,
+      "show_stock_badge": true,
+      "variant_selector": "modal_matrix",
+      "variant_axes": ["flavor", "nicotine_mg"],
+      "quick_filters": ["flavor", "nicotine_mg", "puffs"],
+      "keypad": "numeric",
+      "allow_price_override": false,
+      "require_customer": false
+    },
+    "product_form": {
+      "groups": ["Básico", "Características", "Especificaciones", "Precios", "Comercial"],
+      "hidden_fields": ["track_lots", "track_expiry", "biological_lot_id"]
+    },
+    "dashboard_widgets": [
+      "sales_today", "avg_ticket", "top_flavors", "low_stock",
+      "gross_margin", "credit_outstanding", "peak_hours"
+    ]
+  },
+
+  "receipt": {
+    "width_mm": 58,
+    "show_attributes": ["flavor", "nicotine_mg"],
+    "footer": "Producto para mayores de 18 años. No se aceptan devoluciones de líquidos abiertos.",
+    "show_logo": true,
+    "show_qr_storefront": true
+  },
+
+  "roles": [
+    { "code": "admin",     "name": "Administrador", "permissions": ["*"] },
+    { "code": "cajero",    "name": "Cajero",
+      "permissions": ["sales.create", "sales.read", "customers.create", "customers.read",
+                      "credit.charge", "credit.collect", "cash.open", "cash.close", "products.read"],
+      "constraints": { "max_discount_pct": 10, "requires_supervisor_pin": ["sales.void"] } },
+    { "code": "inventario","name": "Inventariador",
+      "permissions": ["products.*", "inventory.*", "purchasing.read", "reports.inventory"],
+      "constraints": { "requires_supervisor_pin": ["inventory.adjust"] } },
+    { "code": "contador",  "name": "Contador",
+      "permissions": ["reports.*", "finance.read", "taxes.*", "expenses.*", "credit.read"] }
+  ],
+
+  "automations": [
+    { "key": "low_stock_alert",   "enabled": true, "config": { "channel": "whatsapp", "threshold_source": "reorder_point" } },
+    { "key": "collection_reminder","enabled": true, "config": { "offsets_days": [-1, 3, 7], "channel": "whatsapp" } },
+    { "key": "loyalty_points",    "enabled": true, "config": { "earn_per_currency": 1, "redeem_value": 0.05 } },
+    { "key": "restock_forecast",  "enabled": true, "config": { "model": "moving_avg_28d" } }
+  ],
+
+  "reports": [
+    "sales_by_flavor", "nicotine_mix", "dead_stock_90d",
+    "margin_by_category", "credit_aging", "top_customers"
+  ]
+}

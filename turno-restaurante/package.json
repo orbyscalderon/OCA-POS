@@ -1,0 +1,27 @@
+{
+  "name": "ocpos",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "description": "SaaS B2B multi-tenant, offline-first y agnóstico al nicho para MiPyMEs. El rubro que elige el cliente configura el sistema entero.",
+  "scripts": {
+    "validate:profiles": "node config/validate-profiles.mjs",
+    "seeds:generate": "node db/seeds/generate.mjs",
+    "db:verify": "node db/run-pglite.mjs",
+    "db:test": "node db/run-pglite.mjs --file db/tests/run_tests.sql",
+    "check": "npm run validate:profiles && npm run seeds:generate && npm run db:verify && npm run db:test",
+
+    "demo": "node tools/engine-demo/server.mjs",
+    "demo:check": "node tools/engine-demo/check.mjs",
+
+    "backend:dev": "npm --prefix backend run dev",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "backend:test": "npm --prefix backend test",
+    "frontend:e2e": "npm --prefix frontend run e2e"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.5",
+    "playwright": "^1.49.0"
+  },
+  "engines": { "node": ">=20" }
+}

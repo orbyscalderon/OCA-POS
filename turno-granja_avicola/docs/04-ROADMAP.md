@@ -19,7 +19,7 @@ Buena parte ya está escrita; lo que falta es ejecutarla y montar el andamiaje d
 | Entregable | Estado |
 |---|---|
 | DDL completo (`db/schema/`, 20 archivos) | ✅ escrito |
-| Semillas: países, impuestos, 140 permisos, planes, plantillas, 9 perfiles | ✅ escritas |
+| Semillas: países, impuestos, 140 permisos, planes, plantillas, 12 perfiles | ✅ escritas |
 | Tests: 105 aserciones (`db/tests/`) | ✅ escritas y **pasando** |
 | Workflow de CI (`.github/workflows/ci.yml`) | ✅ escrito, matriz PG 15/16/17 |
 | **Esquema aplicado en PostgreSQL real** | ✅ verificado sobre PG 18.3 (PGlite) |

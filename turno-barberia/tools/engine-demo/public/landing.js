@@ -9,7 +9,7 @@ const api = async (p) => (await fetch(p)).json();
 
 // ── Rotador del titular ───────────────────────────────────────────
 const RUBROS = ['colmado', 'barbería', 'farmacia', 'granja', 'ferretería',
-                'restaurante', 'taller', 'supermercado'];
+                'restaurante', 'taller', 'supermercado', 'panadería', 'boutique', 'veterinaria'];
 let ri = 0;
 setInterval(() => {
   const el = $('#rubro');
@@ -31,6 +31,9 @@ const PITCH = {
   ferreteria:     ['Vende por metro, rollo, quintal o cuñete', 'Variantes por medida, material y color', 'Cotizaciones con seguimiento'],
   taller:         ['Orden de servicio con fotos del estado de ingreso', 'Repuestos originales o alternos', 'Garantía por trabajo realizado'],
   prestamista:    ['Cronograma de cuotas con interés y mora', 'Rutas de cobro por cobrador', 'Cobranza automática por WhatsApp'],
+  panaderia:      ['Vencimiento corto por lote de horneado', 'Encargos personalizados de tortas', 'Venta por unidad, docena o bandeja'],
+  moda:           ['Variantes por talla y color en una sola matriz', 'Apartado sin cronograma de cuotas', 'Control de temporada y colección'],
+  veterinaria:    ['Agenda por veterinario con historial clínico', 'Ficha de mascota con vacunas y alergias', 'Recordatorio automático de refuerzos'],
 };
 
 const PREVIEW = {

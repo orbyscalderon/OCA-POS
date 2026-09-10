@@ -1,0 +1,184 @@
+{
+  "$schema": "../schemas/business-profile.schema.json",
+  "profile": {
+    "slug": "moda",
+    "name": "Ropa y Calzado",
+    "category": "retail",
+    "icon": "shirt",
+    "version": 1,
+    "primary_mode": "variant_inventory",
+    "description": "Boutique de ropa y calzado con variantes por talla y color, temporadas y devoluciones por cambio."
+  },
+
+  "modules": {
+    "pos":            { "enabled": true,  "required": true },
+    "inventory":      { "enabled": true,  "variants": true, "lots": false, "expiry": false, "serials": false },
+    "credit":         { "enabled": true,  "default_kind": "open_account", "label": "Aparte / apartado" },
+    "customers":      { "enabled": true },
+    "loyalty":        { "enabled": true,  "default_program": "points" },
+    "purchasing":     { "enabled": true },
+    "expenses":       { "enabled": true },
+    "cash":           { "enabled": true },
+    "taxes":          { "enabled": true },
+    "storefront":     { "enabled": true,  "checkout_mode": "whatsapp" },
+    "appointments":   { "enabled": false },
+    "tables":         { "enabled": false },
+    "service_orders": { "enabled": false },
+    "employees":      { "enabled": true,  "commissions": true, "attendance": false },
+    "agro":           { "enabled": false },
+    "lending":        { "enabled": false }
+  },
+
+  "operation_modes": ["variant_inventory", "quick_pos"],
+
+  "uoms": [
+    { "code": "UND", "name": "Unidad", "dimension": "unit", "factor_to_base": 1, "is_base": true, "precision": 0 },
+    { "code": "PAR", "name": "Par", "dimension": "unit", "factor_to_base": 1, "precision": 0 },
+    { "code": "DOC", "name": "Docena", "dimension": "unit", "factor_to_base": 12, "precision": 0 }
+  ],
+
+  "categories": [
+    { "slug": "ropa-hombre", "name": "Ropa de Hombre", "color": "#1E3A8A", "icon": "shirt" },
+    { "slug": "ropa-mujer", "name": "Ropa de Mujer", "color": "#BE185D", "icon": "shirt" },
+    { "slug": "ropa-nino", "name": "Ropa Infantil", "color": "#0891B2", "icon": "shirt" },
+    { "slug": "calzado", "name": "Calzado", "color": "#78350F", "icon": "footprints" },
+    { "slug": "accesorios", "name": "Accesorios", "color": "#78716C", "icon": "watch" }
+  ],
+
+  "attributes": {
+    "product": [
+      {
+        "key": "talla", "label": "Talla", "data_type": "enum", "ui_widget": "chips",
+        "ui_group": "Variantes", "is_variant_axis": true, "is_filterable": true,
+        "show_in_pos": true, "show_in_receipt": true, "position": 10,
+        "options": [
+          { "value": "xs", "label": "XS" }, { "value": "s", "label": "S" },
+          { "value": "m", "label": "M" }, { "value": "l", "label": "L" },
+          { "value": "xl", "label": "XL" }, { "value": "xxl", "label": "XXL" }
+        ],
+        "validation": { "required": true },
+        "applies_to_categories": ["ropa-hombre", "ropa-mujer", "ropa-nino"]
+      },
+      {
+        "key": "talla_calzado", "label": "Talla de calzado", "data_type": "enum", "ui_widget": "chips",
+        "ui_group": "Variantes", "is_variant_axis": true, "is_filterable": true,
+        "show_in_pos": true, "show_in_receipt": true, "position": 15,
+        "options": [
+          { "value": "35", "label": "35" }, { "value": "36", "label": "36" }, { "value": "37", "label": "37" },
+          { "value": "38", "label": "38" }, { "value": "39", "label": "39" }, { "value": "40", "label": "40" },
+          { "value": "41", "label": "41" }, { "value": "42", "label": "42" }, { "value": "43", "label": "43" },
+          { "value": "44", "label": "44" }
+        ],
+        "applies_to_categories": ["calzado"]
+      },
+      {
+        "key": "color", "label": "Color", "data_type": "enum", "ui_widget": "chips",
+        "ui_group": "Variantes", "is_variant_axis": true, "is_filterable": true,
+        "show_in_pos": true, "show_in_receipt": true, "position": 20,
+        "options": [
+          { "value": "negro", "label": "Negro" }, { "value": "blanco", "label": "Blanco" },
+          { "value": "azul", "label": "Azul" }, { "value": "rojo", "label": "Rojo" },
+          { "value": "gris", "label": "Gris" }, { "value": "beige", "label": "Beige" },
+          { "value": "verde", "label": "Verde" }, { "value": "estampado", "label": "Estampado" }
+        ]
+      },
+      {
+        "key": "marca", "label": "Marca", "data_type": "text", "ui_widget": "text",
+        "ui_group": "Comercial", "is_filterable": true, "position": 30
+      },
+      {
+        "key": "genero", "label": "Género", "data_type": "enum", "ui_widget": "segmented",
+        "ui_group": "Comercial", "is_filterable": true, "position": 40,
+        "options": [
+          { "value": "hombre", "label": "Hombre" }, { "value": "mujer", "label": "Mujer" },
+          { "value": "unisex", "label": "Unisex" }, { "value": "nino", "label": "Niño/a" }
+        ]
+      },
+      {
+        "key": "temporada", "label": "Temporada/colección", "data_type": "text",
+        "ui_widget": "text", "ui_group": "Comercial", "is_filterable": true, "position": 50
+      },
+      {
+        "key": "material", "label": "Material", "data_type": "text", "ui_widget": "text",
+        "ui_group": "Características", "position": 60
+      }
+    ],
+    "customer": [
+      { "key": "talla_habitual", "label": "Talla habitual", "data_type": "text", "position": 10 },
+      { "key": "estilo_preferido", "label": "Estilo preferido", "data_type": "text", "position": 20 }
+    ]
+  },
+
+  "product_defaults": {
+    "track_inventory": true,
+    "track_lots": false,
+    "track_expiry": false,
+    "track_serials": false,
+    "reorder_point": 3
+  },
+
+  "ui": {
+    "navigation": [
+      { "key": "pos",        "label": "Vender",     "icon": "shopping-cart", "route": "/pos",        "primary": true },
+      { "key": "inventory",  "label": "Inventario", "icon": "package",       "route": "/inventario" },
+      { "key": "credit",     "label": "Apartado",   "icon": "notebook",      "route": "/fiado" },
+      { "key": "customers",  "label": "Clientes",   "icon": "users",         "route": "/clientes" },
+      { "key": "reports",    "label": "Reportes",   "icon": "bar-chart",     "route": "/reportes" },
+      { "key": "storefront", "label": "Mi Tienda",  "icon": "globe",         "route": "/tienda" }
+    ],
+    "pos": {
+      "layout": "grid_with_images",
+      "primary_action": "scan",
+      "show_product_images": true,
+      "show_stock_badge": true,
+      "variant_selector": "modal_matrix",
+      "variant_axes": ["talla", "talla_calzado", "color"],
+      "quick_filters": ["talla", "color", "marca", "genero"],
+      "keypad": "numeric",
+      "allow_price_override": true,
+      "price_override_permission": "sales.price_override",
+      "require_customer": false
+    },
+    "product_form": {
+      "groups": ["Básico", "Variantes", "Comercial", "Características", "Precios"],
+      "hidden_fields": ["track_lots", "track_expiry", "biological_lot_id"]
+    },
+    "dashboard_widgets": [
+      "sales_today", "avg_ticket", "top_products", "low_stock",
+      "gross_margin", "credit_outstanding", "peak_hours"
+    ]
+  },
+
+  "receipt": {
+    "width_mm": 58,
+    "show_attributes": ["talla", "color"],
+    "footer": "Cambios dentro de 7 días con etiqueta y ticket. No se aceptan devoluciones en efectivo.",
+    "show_logo": true,
+    "show_qr_storefront": true
+  },
+
+  "roles": [
+    { "code": "admin",     "name": "Administrador", "permissions": ["*"] },
+    { "code": "cajero",    "name": "Cajero",
+      "permissions": ["sales.create", "sales.read", "customers.create", "customers.read",
+                      "credit.charge", "credit.collect", "cash.open", "cash.close", "products.read"],
+      "constraints": { "max_discount_pct": 10, "requires_supervisor_pin": ["sales.void"] } },
+    { "code": "inventario","name": "Inventariador",
+      "permissions": ["products.*", "inventory.*", "purchasing.read", "reports.inventory"],
+      "constraints": { "requires_supervisor_pin": ["inventory.adjust"] } },
+    { "code": "contador",  "name": "Contador",
+      "permissions": ["reports.*", "finance.read", "taxes.*", "expenses.*", "credit.read"] }
+  ],
+
+  "automations": [
+    { "key": "low_stock_alert",    "enabled": true, "config": { "channel": "whatsapp", "threshold_source": "reorder_point" } },
+    { "key": "collection_reminder","enabled": true, "config": { "offsets_days": [-1, 3, 7], "channel": "whatsapp" } },
+    { "key": "loyalty_points",     "enabled": true, "config": { "earn_per_currency": 1, "redeem_value": 0.05 } },
+    { "key": "restock_forecast",   "enabled": true, "config": { "model": "moving_avg_28d" } }
+  ],
+
+  "reports": [
+    "sales_by_category", "sell_through_by_size", "dead_stock_90d",
+    "margin_by_category", "credit_aging", "top_customers"
+  ]
+}

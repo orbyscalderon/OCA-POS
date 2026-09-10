@@ -51,7 +51,7 @@ log(bg !== 'rgba(0, 0, 0, 0)' && bg !== 'rgb(255, 255, 255)', 'El CSS se aplicó
 // Contenido que llega por API
 await page.waitForSelector('#rubro-tabs button', { timeout: 5000 }).catch(() => {});
 const tabs = await page.locator('#rubro-tabs button').count();
-log(tabs === 9, 'Los 9 rubros se cargaron desde la API', `${tabs} pestañas`);
+log(tabs === 12, 'Los 12 rubros se cargaron desde la API', `${tabs} pestañas`);
 
 await page.waitForSelector('.plan', { timeout: 5000 }).catch(() => {});
 const plans = await page.locator('.plan').count();
@@ -100,7 +100,7 @@ console.log('\n── Demo ─────────────────�
 await page.goto(`${BASE}/demo`, { waitUntil: 'networkidle' });
 await page.waitForSelector('#profiles .card', { timeout: 6000 }).catch(() => {});
 const cards = await page.locator('#profiles .card').count();
-log(cards === 9, 'El selector muestra los 9 rubros', `${cards} tarjetas`);
+log(cards === 12, 'El selector muestra los 12 rubros', `${cards} tarjetas`);
 await page.screenshot({ path: join(SHOTS, '05-demo-selector.png') });
 
 // Entrar a un rubro con inventario

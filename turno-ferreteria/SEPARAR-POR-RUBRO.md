@@ -12,7 +12,7 @@ node tools/crear-proyecto-rubro.mjs supermercado
 Crea `../turno-supermercado/` — copia del código sin `node_modules`, `.git`, `_legacy` ni secretos,
 ya configurada con `RUBRO_FIJO=supermercado` / `VITE_RUBRO_FIJO=supermercado`.
 
-Rubros: `barberia · taller · restaurante · supermercado · ferreteria · vape_shop · farmacia · granja_avicola · prestamista`
+Rubros: `barberia · taller · restaurante · supermercado · ferreteria · vape_shop · farmacia · granja_avicola · prestamista · panaderia · moda · veterinaria`
 
 ## 2. Convertirlo en su propio repo
 ```
@@ -31,7 +31,7 @@ git push -u origin main
 | Sin `RUBRO_FIJO` (plataforma) | Con `RUBRO_FIJO=<rubro>` (producto único) |
 |---|---|
 | Home `/` = hub multi-rubro | Home `/` = landing de ese rubro |
-| `/perfiles` devuelve los 9 | `/perfiles` devuelve solo ese |
+| `/perfiles` devuelve los 12 | `/perfiles` devuelve solo ese |
 | Al crear negocio eliges rubro | El negocio se fuerza a ese rubro |
 | Enlace "Soluciones" visible | Oculto |
 

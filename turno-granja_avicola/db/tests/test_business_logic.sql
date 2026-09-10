@@ -504,8 +504,8 @@ END $msg$;
 DO $profiles$
 DECLARE S constant text := 'perfiles';
 BEGIN
-  PERFORM test.eq(S, 'Los 9 perfiles están sembrados',
-    (SELECT count(*) FROM platform.business_profiles), 9);
+  PERFORM test.eq(S, 'Los 12 perfiles están sembrados',
+    (SELECT count(*) FROM platform.business_profiles), 12);
 
   PERFORM test.eq(S, 'Cada perfil tiene manifiesto publicado',
     (SELECT count(*) FROM platform.business_profiles bp

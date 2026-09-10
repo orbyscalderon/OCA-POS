@@ -102,6 +102,30 @@ const DEMO_CATALOG = {
     ['cargos',    'Cargo por reestructuración', 500, {}],
     ['cargos',    'Cargo por cheque devuelto',  750, {}],
   ],
+  panaderia: [
+    ['pan-salado',     'Pan de agua (und)',       15, { tipo_producto: 'pan', peso_g: 80, contiene_gluten: true, dias_vida_util: 1 }],
+    ['pan-salado',     'Pan de agua (docena)',   160, { tipo_producto: 'pan', peso_g: 80, contiene_gluten: true, dias_vida_util: 1 }],
+    ['pan-dulce',      'Pan de coco',             35, { tipo_producto: 'pan', peso_g: 120, contiene_gluten: true, dias_vida_util: 2 }],
+    ['reposteria',     'Quesito',                 45, { tipo_producto: 'reposteria', contiene_gluten: true, dias_vida_util: 2 }],
+    ['tortas-pasteles','Torta de chocolate (8p)', 950, { tipo_producto: 'torta', personalizable: true, contiene_gluten: true, dias_vida_util: 3 }],
+    ['galletas',       'Galletas de avena (6u)',  90, { tipo_producto: 'galleta', apto_veganos: true, dias_vida_util: 7 }],
+  ],
+  moda: [
+    ['ropa-hombre', 'Camisa manga larga',   1200, { talla: 'm',  color: 'azul',   marca: 'Basic', genero: 'hombre', temporada: 'Otoño 2026' }],
+    ['ropa-mujer',  'Vestido casual',       1650, { talla: 's',  color: 'rojo',   marca: 'Luna',  genero: 'mujer',  temporada: 'Verano 2026' }],
+    ['ropa-nino',   'Set niño 2 piezas',     850, { talla: 'm',  color: 'azul',   marca: 'KidsCo', genero: 'nino' }],
+    ['calzado',     'Tenis urbanos',        2400, { talla_calzado: '40', color: 'negro', marca: 'Runfast', genero: 'unisex' }],
+    ['calzado',     'Sandalias de mujer',   1100, { talla_calzado: '37', color: 'beige', marca: 'Luna', genero: 'mujer' }],
+    ['accesorios',  'Correa de cuero',       650, { color: 'negro', marca: 'Basic', genero: 'unisex' }],
+  ],
+  veterinaria: [
+    ['consultas', 'Consulta general',        850, { duration_min: 30, especie_objetivo: 'perro', skill_required: 'veterinario', commission_pct: 30 }],
+    ['vacunas',   'Vacuna antirrábica',      650, { duration_min: 15, especie_objetivo: 'perro', skill_required: 'veterinario', commission_pct: 25 }],
+    ['vacunas',   'Desparasitación',         450, { duration_min: 15, especie_objetivo: 'gato', skill_required: 'asistente', commission_pct: 20 }],
+    ['estetica',  'Baño y corte (mediano)', 1200, { duration_min: 60, especie_objetivo: 'perro', skill_required: 'asistente', commission_pct: 30 }],
+    ['alimento',  'Alimento seco perro 3kg',1450, {}],
+    ['medicamentos','Antiparasitario oral',  380, { requiere_receta: true }],
+  ],
 };
 
 // =====================================================================

@@ -9,7 +9,7 @@ import { cp, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 
-const RUBROS = ["barberia", "taller", "restaurante", "supermercado", "ferreteria", "vape_shop", "farmacia", "granja_avicola", "prestamista"];
+const RUBROS = ["barberia", "taller", "restaurante", "supermercado", "ferreteria", "vape_shop", "farmacia", "granja_avicola", "prestamista", "panaderia", "moda", "veterinaria"];
 
 const rubro = process.argv[2];
 if (!rubro || !RUBROS.includes(rubro)) {

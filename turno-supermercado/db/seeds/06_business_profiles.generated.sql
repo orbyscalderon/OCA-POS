@@ -3146,11 +3146,1145 @@ ON CONFLICT (profile_id, version) DO UPDATE
       published_at = COALESCE(platform.business_profile_versions.published_at, now()),
       changelog = EXCLUDED.changelog;
 
+-- ── Ropa y Calzado (moda) ──────────────────────────────
+INSERT INTO platform.business_profiles
+  (slug, name, description, icon, category, primary_mode, is_public, sort_order)
+VALUES ('moda', 'Ropa y Calzado', 'Boutique de ropa y calzado con variantes por talla y color, temporadas y devoluciones por cambio.', 'shirt',
+        'retail', 'variant_inventory', true, 50)
+ON CONFLICT (slug) DO UPDATE
+  SET name = EXCLUDED.name,
+      description = EXCLUDED.description,
+      icon = EXCLUDED.icon,
+      category = EXCLUDED.category,
+      primary_mode = EXCLUDED.primary_mode,
+      sort_order = EXCLUDED.sort_order;
+
+INSERT INTO platform.business_profile_versions
+  (profile_id, version, manifest, status, published_at, changelog)
+SELECT bp.id, 1, $manifest${
+  "$schema": "../schemas/business-profile.schema.json",
+  "profile": {
+    "slug": "moda",
+    "name": "Ropa y Calzado",
+    "category": "retail",
+    "icon": "shirt",
+    "version": 1,
+    "primary_mode": "variant_inventory",
+    "description": "Boutique de ropa y calzado con variantes por talla y color, temporadas y devoluciones por cambio."
+  },
+  "modules": {
+    "pos": {
+      "enabled": true,
+      "required": true
+    },
+    "inventory": {
+      "enabled": true,
+      "variants": true,
+      "lots": false,
+      "expiry": false,
+      "serials": false
+    },
+    "credit": {
+      "enabled": true,
+      "default_kind": "open_account",
+      "label": "Aparte / apartado"
+    },
+    "customers": {
+      "enabled": true
+    },
+    "loyalty": {
+      "enabled": true,
+      "default_program": "points"
+    },
+    "purchasing": {
+      "enabled": true
+    },
+    "expenses": {
+      "enabled": true
+    },
+    "cash": {
+      "enabled": true
+    },
+    "taxes": {
+      "enabled": true
+    },
+    "storefront": {
+      "enabled": true,
+      "checkout_mode": "whatsapp"
+    },
+    "appointments": {
+      "enabled": false
+    },
+    "tables": {
+      "enabled": false
+    },
+    "service_orders": {
+      "enabled": false
+    },
+    "employees": {
+      "enabled": true,
+      "commissions": true,
+      "attendance": false
+    },
+    "agro": {
+      "enabled": false
+    },
+    "lending": {
+      "enabled": false
+    }
+  },
+  "operation_modes": [
+    "variant_inventory",
+    "quick_pos"
+  ],
+  "uoms": [
+    {
+      "code": "UND",
+      "name": "Unidad",
+      "dimension": "unit",
+      "factor_to_base": 1,
+      "is_base": true,
+      "precision": 0
+    },
+    {
+      "code": "PAR",
+      "name": "Par",
+      "dimension": "unit",
+      "factor_to_base": 1,
+      "precision": 0
+    },
+    {
+      "code": "DOC",
+      "name": "Docena",
+      "dimension": "unit",
+      "factor_to_base": 12,
+      "precision": 0
+    }
+  ],
+  "categories": [
+    {
+      "slug": "ropa-hombre",
+      "name": "Ropa de Hombre",
+      "color": "#1E3A8A",
+      "icon": "shirt"
+    },
+    {
+      "slug": "ropa-mujer",
+      "name": "Ropa de Mujer",
+      "color": "#BE185D",
+      "icon": "shirt"
+    },
+    {
+      "slug": "ropa-nino",
+      "name": "Ropa Infantil",
+      "color": "#0891B2",
+      "icon": "shirt"
+    },
+    {
+      "slug": "calzado",
+      "name": "Calzado",
+      "color": "#78350F",
+      "icon": "footprints"
+    },
+    {
+      "slug": "accesorios",
+      "name": "Accesorios",
+      "color": "#78716C",
+      "icon": "watch"
+    }
+  ],
+  "attributes": {
+    "product": [
+      {
+        "key": "talla",
+        "label": "Talla",
+        "data_type": "enum",
+        "ui_widget": "chips",
+        "ui_group": "Variantes",
+        "is_variant_axis": true,
+        "is_filterable": true,
+        "show_in_pos": true,
+        "show_in_receipt": true,
+        "position": 10,
+        "options": [
+          {
+            "value": "xs",
+            "label": "XS"
+          },
+          {
+            "value": "s",
+            "label": "S"
+          },
+          {
+            "value": "m",
+            "label": "M"
+          },
+          {
+            "value": "l",
+            "label": "L"
+          },
+          {
+            "value": "xl",
+            "label": "XL"
+          },
+          {
+            "value": "xxl",
+            "label": "XXL"
+          }
+        ],
+        "validation": {
+          "required": true
+        },
+        "applies_to_categories": [
+          "ropa-hombre",
+          "ropa-mujer",
+          "ropa-nino"
+        ]
+      },
+      {
+        "key": "talla_calzado",
+        "label": "Talla de calzado",
+        "data_type": "enum",
+        "ui_widget": "chips",
+        "ui_group": "Variantes",
+        "is_variant_axis": true,
+        "is_filterable": true,
+        "show_in_pos": true,
+        "show_in_receipt": true,
+        "position": 15,
+        "options": [
+          {
+            "value": "35",
+            "label": "35"
+          },
+          {
+            "value": "36",
+            "label": "36"
+          },
+          {
+            "value": "37",
+            "label": "37"
+          },
+          {
+            "value": "38",
+            "label": "38"
+          },
+          {
+            "value": "39",
+            "label": "39"
+          },
+          {
+            "value": "40",
+            "label": "40"
+          },
+          {
+            "value": "41",
+            "label": "41"
+          },
+          {
+            "value": "42",
+            "label": "42"
+          },
+          {
+            "value": "43",
+            "label": "43"
+          },
+          {
+            "value": "44",
+            "label": "44"
+          }
+        ],
+        "applies_to_categories": [
+          "calzado"
+        ]
+      },
+      {
+        "key": "color",
+        "label": "Color",
+        "data_type": "enum",
+        "ui_widget": "chips",
+        "ui_group": "Variantes",
+        "is_variant_axis": true,
+        "is_filterable": true,
+        "show_in_pos": true,
+        "show_in_receipt": true,
+        "position": 20,
+        "options": [
+          {
+            "value": "negro",
+            "label": "Negro"
+          },
+          {
+            "value": "blanco",
+            "label": "Blanco"
+          },
+          {
+            "value": "azul",
+            "label": "Azul"
+          },
+          {
+            "value": "rojo",
+            "label": "Rojo"
+          },
+          {
+            "value": "gris",
+            "label": "Gris"
+          },
+          {
+            "value": "beige",
+            "label": "Beige"
+          },
+          {
+            "value": "verde",
+            "label": "Verde"
+          },
+          {
+            "value": "estampado",
+            "label": "Estampado"
+          }
+        ]
+      },
+      {
+        "key": "marca",
+        "label": "Marca",
+        "data_type": "text",
+        "ui_widget": "text",
+        "ui_group": "Comercial",
+        "is_filterable": true,
+        "position": 30
+      },
+      {
+        "key": "genero",
+        "label": "Género",
+        "data_type": "enum",
+        "ui_widget": "segmented",
+        "ui_group": "Comercial",
+        "is_filterable": true,
+        "position": 40,
+        "options": [
+          {
+            "value": "hombre",
+            "label": "Hombre"
+          },
+          {
+            "value": "mujer",
+            "label": "Mujer"
+          },
+          {
+            "value": "unisex",
+            "label": "Unisex"
+          },
+          {
+            "value": "nino",
+            "label": "Niño/a"
+          }
+        ]
+      },
+      {
+        "key": "temporada",
+        "label": "Temporada/colección",
+        "data_type": "text",
+        "ui_widget": "text",
+        "ui_group": "Comercial",
+        "is_filterable": true,
+        "position": 50
+      },
+      {
+        "key": "material",
+        "label": "Material",
+        "data_type": "text",
+        "ui_widget": "text",
+        "ui_group": "Características",
+        "position": 60
+      }
+    ],
+    "customer": [
+      {
+        "key": "talla_habitual",
+        "label": "Talla habitual",
+        "data_type": "text",
+        "position": 10
+      },
+      {
+        "key": "estilo_preferido",
+        "label": "Estilo preferido",
+        "data_type": "text",
+        "position": 20
+      }
+    ]
+  },
+  "product_defaults": {
+    "track_inventory": true,
+    "track_lots": false,
+    "track_expiry": false,
+    "track_serials": false,
+    "reorder_point": 3
+  },
+  "ui": {
+    "navigation": [
+      {
+        "key": "pos",
+        "label": "Vender",
+        "icon": "shopping-cart",
+        "route": "/pos",
+        "primary": true
+      },
+      {
+        "key": "inventory",
+        "label": "Inventario",
+        "icon": "package",
+        "route": "/inventario"
+      },
+      {
+        "key": "credit",
+        "label": "Apartado",
+        "icon": "notebook",
+        "route": "/fiado"
+      },
+      {
+        "key": "customers",
+        "label": "Clientes",
+        "icon": "users",
+        "route": "/clientes"
+      },
+      {
+        "key": "reports",
+        "label": "Reportes",
+        "icon": "bar-chart",
+        "route": "/reportes"
+      },
+      {
+        "key": "storefront",
+        "label": "Mi Tienda",
+        "icon": "globe",
+        "route": "/tienda"
+      }
+    ],
+    "pos": {
+      "layout": "grid_with_images",
+      "primary_action": "scan",
+      "show_product_images": true,
+      "show_stock_badge": true,
+      "variant_selector": "modal_matrix",
+      "variant_axes": [
+        "talla",
+        "talla_calzado",
+        "color"
+      ],
+      "quick_filters": [
+        "talla",
+        "color",
+        "marca",
+        "genero"
+      ],
+      "keypad": "numeric",
+      "allow_price_override": true,
+      "price_override_permission": "sales.price_override",
+      "require_customer": false
+    },
+    "product_form": {
+      "groups": [
+        "Básico",
+        "Variantes",
+        "Comercial",
+        "Características",
+        "Precios"
+      ],
+      "hidden_fields": [
+        "track_lots",
+        "track_expiry",
+        "biological_lot_id"
+      ]
+    },
+    "dashboard_widgets": [
+      "sales_today",
+      "avg_ticket",
+      "top_products",
+      "low_stock",
+      "gross_margin",
+      "credit_outstanding",
+      "peak_hours"
+    ]
+  },
+  "receipt": {
+    "width_mm": 58,
+    "show_attributes": [
+      "talla",
+      "color"
+    ],
+    "footer": "Cambios dentro de 7 días con etiqueta y ticket. No se aceptan devoluciones en efectivo.",
+    "show_logo": true,
+    "show_qr_storefront": true
+  },
+  "roles": [
+    {
+      "code": "admin",
+      "name": "Administrador",
+      "permissions": [
+        "*"
+      ]
+    },
+    {
+      "code": "cajero",
+      "name": "Cajero",
+      "permissions": [
+        "sales.create",
+        "sales.read",
+        "customers.create",
+        "customers.read",
+        "credit.charge",
+        "credit.collect",
+        "cash.open",
+        "cash.close",
+        "products.read"
+      ],
+      "constraints": {
+        "max_discount_pct": 10,
+        "requires_supervisor_pin": [
+          "sales.void"
+        ]
+      }
+    },
+    {
+      "code": "inventario",
+      "name": "Inventariador",
+      "permissions": [
+        "products.*",
+        "inventory.*",
+        "purchasing.read",
+        "reports.inventory"
+      ],
+      "constraints": {
+        "requires_supervisor_pin": [
+          "inventory.adjust"
+        ]
+      }
+    },
+    {
+      "code": "contador",
+      "name": "Contador",
+      "permissions": [
+        "reports.*",
+        "finance.read",
+        "taxes.*",
+        "expenses.*",
+        "credit.read"
+      ]
+    }
+  ],
+  "automations": [
+    {
+      "key": "low_stock_alert",
+      "enabled": true,
+      "config": {
+        "channel": "whatsapp",
+        "threshold_source": "reorder_point"
+      }
+    },
+    {
+      "key": "collection_reminder",
+      "enabled": true,
+      "config": {
+        "offsets_days": [
+          -1,
+          3,
+          7
+        ],
+        "channel": "whatsapp"
+      }
+    },
+    {
+      "key": "loyalty_points",
+      "enabled": true,
+      "config": {
+        "earn_per_currency": 1,
+        "redeem_value": 0.05
+      }
+    },
+    {
+      "key": "restock_forecast",
+      "enabled": true,
+      "config": {
+        "model": "moving_avg_28d"
+      }
+    }
+  ],
+  "reports": [
+    "sales_by_category",
+    "sell_through_by_size",
+    "dead_stock_90d",
+    "margin_by_category",
+    "credit_aging",
+    "top_customers"
+  ]
+}$manifest$::jsonb,
+       'published', now(), 'Generado desde config/profiles/moda.json'
+  FROM platform.business_profiles bp WHERE bp.slug = 'moda'
+ON CONFLICT (profile_id, version) DO UPDATE
+  SET manifest = EXCLUDED.manifest,
+      status = 'published',
+      published_at = COALESCE(platform.business_profile_versions.published_at, now()),
+      changelog = EXCLUDED.changelog;
+
+-- ── Panadería / Repostería (panaderia) ─────────────────
+INSERT INTO platform.business_profiles
+  (slug, name, description, icon, category, primary_mode, is_public, sort_order)
+VALUES ('panaderia', 'Panadería / Repostería', 'Producción diaria de pan y repostería con vida útil corta, encargos personalizados y venta al mostrador.', 'bread',
+        'alimentos', 'quick_pos', true, 60)
+ON CONFLICT (slug) DO UPDATE
+  SET name = EXCLUDED.name,
+      description = EXCLUDED.description,
+      icon = EXCLUDED.icon,
+      category = EXCLUDED.category,
+      primary_mode = EXCLUDED.primary_mode,
+      sort_order = EXCLUDED.sort_order;
+
+INSERT INTO platform.business_profile_versions
+  (profile_id, version, manifest, status, published_at, changelog)
+SELECT bp.id, 1, $manifest${
+  "$schema": "../schemas/business-profile.schema.json",
+  "profile": {
+    "slug": "panaderia",
+    "name": "Panadería / Repostería",
+    "category": "alimentos",
+    "icon": "bread",
+    "version": 1,
+    "primary_mode": "quick_pos",
+    "description": "Producción diaria de pan y repostería con vida útil corta, encargos personalizados y venta al mostrador."
+  },
+  "modules": {
+    "pos": {
+      "enabled": true,
+      "required": true,
+      "layout": "grid_with_images"
+    },
+    "inventory": {
+      "enabled": true,
+      "variants": false,
+      "lots": true,
+      "expiry": true,
+      "serials": false
+    },
+    "credit": {
+      "enabled": true,
+      "default_kind": "open_account",
+      "label": "Fiado a clientes frecuentes"
+    },
+    "customers": {
+      "enabled": true
+    },
+    "loyalty": {
+      "enabled": true,
+      "default_program": "points"
+    },
+    "purchasing": {
+      "enabled": true,
+      "multi_uom": true
+    },
+    "expenses": {
+      "enabled": true
+    },
+    "cash": {
+      "enabled": true
+    },
+    "taxes": {
+      "enabled": true
+    },
+    "storefront": {
+      "enabled": true,
+      "checkout_mode": "whatsapp"
+    },
+    "appointments": {
+      "enabled": false
+    },
+    "tables": {
+      "enabled": false
+    },
+    "service_orders": {
+      "enabled": false
+    },
+    "employees": {
+      "enabled": true,
+      "commissions": false,
+      "attendance": true
+    },
+    "agro": {
+      "enabled": false
+    },
+    "lending": {
+      "enabled": false
+    }
+  },
+  "operation_modes": [
+    "quick_pos"
+  ],
+  "uoms": [
+    {
+      "code": "UND",
+      "name": "Unidad",
+      "dimension": "unit",
+      "factor_to_base": 1,
+      "is_base": true,
+      "precision": 0
+    },
+    {
+      "code": "DOC",
+      "name": "Docena",
+      "dimension": "unit",
+      "factor_to_base": 12,
+      "precision": 0
+    },
+    {
+      "code": "MEDIA_DOC",
+      "name": "Media docena",
+      "dimension": "unit",
+      "factor_to_base": 6,
+      "precision": 0
+    },
+    {
+      "code": "BANDEJA",
+      "name": "Bandeja",
+      "dimension": "unit",
+      "factor_to_base": 24,
+      "precision": 0
+    },
+    {
+      "code": "KG",
+      "name": "Kilogramo",
+      "dimension": "weight",
+      "factor_to_base": 1,
+      "is_base": true,
+      "precision": 3
+    },
+    {
+      "code": "G",
+      "name": "Gramo",
+      "dimension": "weight",
+      "factor_to_base": 0.001,
+      "precision": 0
+    },
+    {
+      "code": "LB",
+      "name": "Libra",
+      "dimension": "weight",
+      "factor_to_base": 0.45359237,
+      "precision": 2
+    },
+    {
+      "code": "SACO",
+      "name": "Saco de harina",
+      "dimension": "weight",
+      "factor_to_base": 45.36,
+      "precision": 2
+    }
+  ],
+  "uom_policy": {
+    "purchase_default": "SACO",
+    "consumption_default": "KG",
+    "sale_defaults": {
+      "pan-salado": "UND",
+      "pan-dulce": "UND",
+      "tortas-pasteles": "UND"
+    }
+  },
+  "categories": [
+    {
+      "slug": "pan-salado",
+      "name": "Pan Salado",
+      "color": "#D97706",
+      "icon": "bread"
+    },
+    {
+      "slug": "pan-dulce",
+      "name": "Pan Dulce",
+      "color": "#F59E0B",
+      "icon": "cookie"
+    },
+    {
+      "slug": "reposteria",
+      "name": "Repostería",
+      "color": "#EC4899",
+      "icon": "cake"
+    },
+    {
+      "slug": "tortas-pasteles",
+      "name": "Tortas y Pasteles",
+      "color": "#DB2777",
+      "icon": "cake"
+    },
+    {
+      "slug": "galletas",
+      "name": "Galletas",
+      "color": "#CA8A04",
+      "icon": "cookie"
+    },
+    {
+      "slug": "bebidas",
+      "name": "Bebidas",
+      "color": "#0EA5E9",
+      "icon": "cup"
+    },
+    {
+      "slug": "ingredientes",
+      "name": "Harinas e Insumos",
+      "color": "#78716C",
+      "icon": "wheat",
+      "purchasable_only": true
+    }
+  ],
+  "attributes": {
+    "product": [
+      {
+        "key": "tipo_producto",
+        "label": "Tipo",
+        "data_type": "enum",
+        "ui_widget": "select",
+        "ui_group": "Producción",
+        "is_filterable": true,
+        "position": 10,
+        "options": [
+          {
+            "value": "pan",
+            "label": "Pan"
+          },
+          {
+            "value": "reposteria",
+            "label": "Repostería"
+          },
+          {
+            "value": "torta",
+            "label": "Torta/pastel"
+          },
+          {
+            "value": "galleta",
+            "label": "Galleta"
+          }
+        ]
+      },
+      {
+        "key": "peso_g",
+        "label": "Peso",
+        "data_type": "number",
+        "ui_widget": "number",
+        "ui_group": "Producción",
+        "unit_suffix": "g",
+        "position": 20
+      },
+      {
+        "key": "contiene_gluten",
+        "label": "Contiene gluten",
+        "data_type": "boolean",
+        "ui_widget": "toggle",
+        "ui_group": "Nutrición",
+        "is_filterable": true,
+        "position": 30
+      },
+      {
+        "key": "apto_veganos",
+        "label": "Apto para veganos",
+        "data_type": "boolean",
+        "ui_widget": "toggle",
+        "ui_group": "Nutrición",
+        "is_filterable": true,
+        "position": 40
+      },
+      {
+        "key": "personalizable",
+        "label": "Se hace por encargo/personalizado",
+        "data_type": "boolean",
+        "ui_widget": "toggle",
+        "ui_group": "Comercial",
+        "position": 50,
+        "applies_to_categories": [
+          "tortas-pasteles"
+        ]
+      },
+      {
+        "key": "dias_vida_util",
+        "label": "Vida útil",
+        "data_type": "integer",
+        "ui_widget": "number",
+        "ui_group": "Producción",
+        "unit_suffix": "días",
+        "default_value": 2,
+        "position": 60
+      }
+    ],
+    "inventory_lot": [
+      {
+        "key": "fecha_horneado",
+        "label": "Fecha de horneado",
+        "data_type": "date",
+        "ui_widget": "date_picker",
+        "semantic_role": "batch",
+        "is_required": true,
+        "position": 10
+      },
+      {
+        "key": "expiry_date",
+        "label": "Vence / consumir antes de",
+        "data_type": "date",
+        "ui_widget": "date_picker",
+        "semantic_role": "expiry",
+        "is_required": true,
+        "position": 20
+      }
+    ],
+    "customer": [
+      {
+        "key": "alergias",
+        "label": "Alergias/intolerancias",
+        "data_type": "text",
+        "position": 10
+      },
+      {
+        "key": "ocasion_proxima",
+        "label": "Próxima ocasión (cumpleaños, evento)",
+        "data_type": "date",
+        "ui_widget": "date_picker",
+        "position": 20
+      }
+    ]
+  },
+  "product_defaults": {
+    "track_inventory": true,
+    "track_lots": true,
+    "track_expiry": true,
+    "track_serials": false,
+    "is_weighted": false,
+    "reorder_point": 5
+  },
+  "ui": {
+    "navigation": [
+      {
+        "key": "pos",
+        "label": "Vender",
+        "icon": "shopping-cart",
+        "route": "/pos",
+        "primary": true
+      },
+      {
+        "key": "inventory",
+        "label": "Producción",
+        "icon": "package",
+        "route": "/inventario"
+      },
+      {
+        "key": "credit",
+        "label": "Fiado",
+        "icon": "notebook",
+        "route": "/fiado"
+      },
+      {
+        "key": "compras",
+        "label": "Compras",
+        "icon": "truck",
+        "route": "/compras"
+      },
+      {
+        "key": "caja",
+        "label": "Caja",
+        "icon": "wallet",
+        "route": "/caja"
+      },
+      {
+        "key": "reports",
+        "label": "Reportes",
+        "icon": "bar-chart",
+        "route": "/reportes"
+      }
+    ],
+    "pos": {
+      "layout": "grid_with_images",
+      "primary_action": "scan",
+      "show_product_images": true,
+      "show_stock_badge": true,
+      "variant_selector": "none",
+      "quick_filters": [
+        "tipo_producto",
+        "contiene_gluten"
+      ],
+      "keypad": "numeric",
+      "allow_price_override": true,
+      "price_override_permission": "sales.price_override",
+      "require_customer": false,
+      "default_uom_selector": true
+    },
+    "product_form": {
+      "groups": [
+        "Básico",
+        "Producción",
+        "Nutrición",
+        "Comercial",
+        "Precios"
+      ],
+      "hidden_fields": [
+        "track_serials",
+        "age_restricted",
+        "requires_prescription"
+      ]
+    },
+    "dashboard_widgets": [
+      "sales_today",
+      "avg_ticket",
+      "top_products",
+      "low_stock",
+      "near_expiry",
+      "credit_outstanding",
+      "peak_hours",
+      "gross_margin"
+    ]
+  },
+  "receipt": {
+    "width_mm": 58,
+    "show_attributes": [
+      "tipo_producto"
+    ],
+    "show_logo": true,
+    "footer": "Producto artesanal del día. Consúmase preferentemente antes de la fecha indicada."
+  },
+  "roles": [
+    {
+      "code": "admin",
+      "name": "Administrador",
+      "permissions": [
+        "*"
+      ]
+    },
+    {
+      "code": "cajero",
+      "name": "Cajero",
+      "permissions": [
+        "sales.create",
+        "sales.read_own",
+        "sales.reprint",
+        "sales.hold",
+        "customers.create",
+        "customers.read",
+        "credit.charge",
+        "credit.collect",
+        "cash.open",
+        "cash.close",
+        "products.read",
+        "attendance.clock"
+      ],
+      "constraints": {
+        "max_discount_pct": 5,
+        "requires_supervisor_pin": [
+          "sales.void",
+          "sales.refund"
+        ]
+      }
+    },
+    {
+      "code": "inventario",
+      "name": "Panadero / Inventariador",
+      "permissions": [
+        "products.read",
+        "products.create",
+        "products.update",
+        "inventory.read",
+        "inventory.receive",
+        "inventory.count",
+        "inventory.lots",
+        "purchasing.read",
+        "purchasing.receive",
+        "reports.inventory"
+      ],
+      "constraints": {
+        "requires_supervisor_pin": [
+          "inventory.adjust"
+        ]
+      }
+    },
+    {
+      "code": "contador",
+      "name": "Contador",
+      "permissions": [
+        "reports.sales",
+        "reports.finance",
+        "reports.credit",
+        "reports.export",
+        "finance.read",
+        "taxes.read",
+        "taxes.issue",
+        "expenses.read",
+        "expenses.create",
+        "credit.read"
+      ]
+    }
+  ],
+  "automations": [
+    {
+      "key": "low_stock_alert",
+      "enabled": true,
+      "config": {
+        "channel": "whatsapp",
+        "threshold_source": "reorder_point"
+      }
+    },
+    {
+      "key": "expiry_alert",
+      "enabled": true,
+      "config": {
+        "days_before": [
+          1
+        ]
+      }
+    },
+    {
+      "key": "collection_reminder",
+      "enabled": true,
+      "config": {
+        "offsets_days": [
+          -1,
+          7,
+          15
+        ],
+        "channel": "whatsapp"
+      }
+    },
+    {
+      "key": "loyalty_points",
+      "enabled": true,
+      "config": {
+        "earn_per_currency": 1,
+        "redeem_value": 0.02
+      }
+    },
+    {
+      "key": "daily_summary",
+      "enabled": true,
+      "config": {
+        "hour_local": 21,
+        "channel": "whatsapp"
+      }
+    }
+  ],
+  "reports": [
+    "sales_by_category",
+    "top_products",
+    "waste_by_expiry",
+    "margin_by_category",
+    "near_expiry",
+    "credit_aging",
+    "peak_hours",
+    "custom_orders_pending"
+  ]
+}$manifest$::jsonb,
+       'published', now(), 'Generado desde config/profiles/panaderia.json'
+  FROM platform.business_profiles bp WHERE bp.slug = 'panaderia'
+ON CONFLICT (profile_id, version) DO UPDATE
+  SET manifest = EXCLUDED.manifest,
+      status = 'published',
+      published_at = COALESCE(platform.business_profile_versions.published_at, now()),
+      changelog = EXCLUDED.changelog;
+
 -- ── Prestamista / Financiera (prestamista) ─────────────
 INSERT INTO platform.business_profiles
   (slug, name, description, icon, category, primary_mode, is_public, sort_order)
 VALUES ('prestamista', 'Prestamista / Financiera', 'Colocación de préstamos con cronograma, interés, mora y cobranza en ruta. El inventario no existe: el producto es el dinero.', 'hand-coins',
-        'financiero', 'lending', true, 50)
+        'financiero', 'lending', true, 70)
 ON CONFLICT (slug) DO UPDATE
   SET name = EXCLUDED.name,
       description = EXCLUDED.description,
@@ -3751,7 +4885,7 @@ ON CONFLICT (profile_id, version) DO UPDATE
 INSERT INTO platform.business_profiles
   (slug, name, description, icon, category, primary_mode, is_public, sort_order)
 VALUES ('restaurante', 'Restaurante / Bar', 'Salón con mesas, comandas a cocina, modificadores por plato y descuento automático de insumos por receta.', 'utensils',
-        'alimentos', 'tables', true, 60)
+        'alimentos', 'tables', true, 80)
 ON CONFLICT (slug) DO UPDATE
   SET name = EXCLUDED.name,
       description = EXCLUDED.description,
@@ -4430,7 +5564,7 @@ ON CONFLICT (profile_id, version) DO UPDATE
 INSERT INTO platform.business_profiles
   (slug, name, description, icon, category, primary_mode, is_public, sort_order)
 VALUES ('supermercado', 'Supermercado / Colmado', 'Alta rotación, venta por peso con balanza, códigos de barra en todo y fiado de barrio.', 'shopping-basket',
-        'alimentos', 'quick_pos', true, 70)
+        'alimentos', 'quick_pos', true, 90)
 ON CONFLICT (slug) DO UPDATE
   SET name = EXCLUDED.name,
       description = EXCLUDED.description,
@@ -5085,7 +6219,7 @@ ON CONFLICT (profile_id, version) DO UPDATE
 INSERT INTO platform.business_profiles
   (slug, name, description, icon, category, primary_mode, is_public, sort_order)
 VALUES ('taller', 'Taller / Servicio Técnico', 'Recepción de equipos o vehículos, diagnóstico, cotización, repuestos y garantía de la reparación.', 'wrench',
-        'servicios', 'appointments', true, 80)
+        'servicios', 'appointments', true, 100)
 ON CONFLICT (slug) DO UPDATE
   SET name = EXCLUDED.name,
       description = EXCLUDED.description,
@@ -5944,7 +7078,7 @@ ON CONFLICT (profile_id, version) DO UPDATE
 INSERT INTO platform.business_profiles
   (slug, name, description, icon, category, primary_mode, is_public, sort_order)
 VALUES ('vape_shop', 'Tienda de Vapes', 'Retail con alta variabilidad de SKU por sabor y nicotina, control de edad y garantía de dispositivos.', 'cloud',
-        'retail', 'variant_inventory', true, 90)
+        'retail', 'variant_inventory', true, 110)
 ON CONFLICT (slug) DO UPDATE
   SET name = EXCLUDED.name,
       description = EXCLUDED.description,
@@ -6548,6 +7682,690 @@ SELECT bp.id, 1, $manifest${
 }$manifest$::jsonb,
        'published', now(), 'Generado desde config/profiles/vape_shop.json'
   FROM platform.business_profiles bp WHERE bp.slug = 'vape_shop'
+ON CONFLICT (profile_id, version) DO UPDATE
+  SET manifest = EXCLUDED.manifest,
+      status = 'published',
+      published_at = COALESCE(platform.business_profile_versions.published_at, now()),
+      changelog = EXCLUDED.changelog;
+
+-- ── Veterinaria / Pet Shop (veterinaria) ───────────────
+INSERT INTO platform.business_profiles
+  (slug, name, description, icon, category, primary_mode, is_public, sort_order)
+VALUES ('veterinaria', 'Veterinaria / Pet Shop', 'Consultas, vacunación y estética por agenda, más venta de alimento y accesorios para mascotas.', 'paw',
+        'servicios', 'appointments', true, 120)
+ON CONFLICT (slug) DO UPDATE
+  SET name = EXCLUDED.name,
+      description = EXCLUDED.description,
+      icon = EXCLUDED.icon,
+      category = EXCLUDED.category,
+      primary_mode = EXCLUDED.primary_mode,
+      sort_order = EXCLUDED.sort_order;
+
+INSERT INTO platform.business_profile_versions
+  (profile_id, version, manifest, status, published_at, changelog)
+SELECT bp.id, 1, $manifest${
+  "$schema": "../schemas/business-profile.schema.json",
+  "profile": {
+    "slug": "veterinaria",
+    "name": "Veterinaria / Pet Shop",
+    "category": "servicios",
+    "icon": "paw",
+    "version": 1,
+    "primary_mode": "appointments",
+    "description": "Consultas, vacunación y estética por agenda, más venta de alimento y accesorios para mascotas."
+  },
+  "modules": {
+    "pos": {
+      "enabled": true,
+      "required": true,
+      "layout": "service_first"
+    },
+    "inventory": {
+      "enabled": true,
+      "variants": false,
+      "lots": true,
+      "expiry": true,
+      "serials": false,
+      "label": "Alimento, medicamentos y accesorios"
+    },
+    "credit": {
+      "enabled": true,
+      "default_kind": "open_account"
+    },
+    "customers": {
+      "enabled": true,
+      "required": true
+    },
+    "loyalty": {
+      "enabled": true,
+      "default_program": "stamps"
+    },
+    "purchasing": {
+      "enabled": true
+    },
+    "expenses": {
+      "enabled": true
+    },
+    "cash": {
+      "enabled": true
+    },
+    "taxes": {
+      "enabled": true
+    },
+    "storefront": {
+      "enabled": true,
+      "checkout_mode": "whatsapp",
+      "mode": "booking"
+    },
+    "appointments": {
+      "enabled": true,
+      "required": true
+    },
+    "tables": {
+      "enabled": false
+    },
+    "service_orders": {
+      "enabled": true,
+      "label": "Historial clínico"
+    },
+    "employees": {
+      "enabled": true,
+      "commissions": true,
+      "attendance": true,
+      "bookable": true
+    },
+    "agro": {
+      "enabled": false
+    },
+    "lending": {
+      "enabled": false
+    }
+  },
+  "operation_modes": [
+    "appointments",
+    "quick_pos"
+  ],
+  "uoms": [
+    {
+      "code": "UND",
+      "name": "Unidad",
+      "dimension": "unit",
+      "factor_to_base": 1,
+      "is_base": true,
+      "precision": 0
+    },
+    {
+      "code": "SERV",
+      "name": "Servicio",
+      "dimension": "unit",
+      "factor_to_base": 1,
+      "precision": 0
+    },
+    {
+      "code": "KG",
+      "name": "Kilogramo",
+      "dimension": "weight",
+      "factor_to_base": 1,
+      "is_base": true,
+      "precision": 3
+    },
+    {
+      "code": "G",
+      "name": "Gramo",
+      "dimension": "weight",
+      "factor_to_base": 0.001,
+      "precision": 0
+    },
+    {
+      "code": "ML",
+      "name": "Mililitro",
+      "dimension": "volume",
+      "factor_to_base": 0.001,
+      "precision": 0
+    },
+    {
+      "code": "L",
+      "name": "Litro",
+      "dimension": "volume",
+      "factor_to_base": 1,
+      "is_base": true,
+      "precision": 3
+    }
+  ],
+  "categories": [
+    {
+      "slug": "consultas",
+      "name": "Consultas",
+      "color": "#0EA5E9",
+      "icon": "stethoscope",
+      "kind": "service"
+    },
+    {
+      "slug": "vacunas",
+      "name": "Vacunación y Desparasitación",
+      "color": "#16A34A",
+      "icon": "syringe",
+      "kind": "service"
+    },
+    {
+      "slug": "estetica",
+      "name": "Estética / Baño y Corte",
+      "color": "#EC4899",
+      "icon": "scissors",
+      "kind": "service"
+    },
+    {
+      "slug": "cirugia",
+      "name": "Cirugía",
+      "color": "#DC2626",
+      "icon": "scalpel",
+      "kind": "service"
+    },
+    {
+      "slug": "alimento",
+      "name": "Alimento",
+      "color": "#CA8A04",
+      "icon": "bone"
+    },
+    {
+      "slug": "medicamentos",
+      "name": "Medicamentos",
+      "color": "#06B6D4",
+      "icon": "pill"
+    },
+    {
+      "slug": "accesorios",
+      "name": "Accesorios",
+      "color": "#78716C",
+      "icon": "package"
+    }
+  ],
+  "attributes": {
+    "product": [
+      {
+        "key": "duration_min",
+        "label": "Duración",
+        "data_type": "integer",
+        "ui_widget": "stepper",
+        "ui_group": "Servicio",
+        "unit_suffix": "min",
+        "is_required": true,
+        "default_value": 30,
+        "show_in_pos": true,
+        "position": 10,
+        "validation": {
+          "min": 5,
+          "max": 480,
+          "step": 5
+        },
+        "applies_to_categories": [
+          "consultas",
+          "vacunas",
+          "estetica",
+          "cirugia"
+        ]
+      },
+      {
+        "key": "especie_objetivo",
+        "label": "Especie",
+        "data_type": "enum",
+        "ui_widget": "segmented",
+        "ui_group": "Servicio",
+        "is_filterable": true,
+        "position": 20,
+        "options": [
+          {
+            "value": "perro",
+            "label": "Perro"
+          },
+          {
+            "value": "gato",
+            "label": "Gato"
+          },
+          {
+            "value": "ave",
+            "label": "Ave"
+          },
+          {
+            "value": "otro",
+            "label": "Otro"
+          }
+        ]
+      },
+      {
+        "key": "skill_required",
+        "label": "Nivel requerido",
+        "data_type": "enum",
+        "ui_widget": "segmented",
+        "ui_group": "Servicio",
+        "position": 30,
+        "options": [
+          {
+            "value": "asistente",
+            "label": "Asistente"
+          },
+          {
+            "value": "veterinario",
+            "label": "Veterinario"
+          },
+          {
+            "value": "cirujano",
+            "label": "Cirujano"
+          }
+        ]
+      },
+      {
+        "key": "commission_pct",
+        "label": "Comisión del profesional",
+        "data_type": "percent",
+        "ui_widget": "number",
+        "ui_group": "Comercial",
+        "unit_suffix": "%",
+        "default_value": 30,
+        "position": 40
+      },
+      {
+        "key": "requiere_receta",
+        "label": "Requiere receta veterinaria",
+        "data_type": "boolean",
+        "ui_widget": "toggle",
+        "ui_group": "Comercial",
+        "position": 50,
+        "applies_to_categories": [
+          "medicamentos"
+        ]
+      }
+    ],
+    "inventory_lot": [
+      {
+        "key": "expiry_date",
+        "label": "Fecha de vencimiento",
+        "data_type": "date",
+        "ui_widget": "date_picker",
+        "semantic_role": "expiry",
+        "is_required": true,
+        "position": 10
+      }
+    ],
+    "customer": [
+      {
+        "key": "nombre_mascota",
+        "label": "Nombre de la mascota",
+        "data_type": "text",
+        "position": 10
+      },
+      {
+        "key": "especie",
+        "label": "Especie",
+        "data_type": "enum",
+        "ui_widget": "select",
+        "is_filterable": true,
+        "position": 20,
+        "options": [
+          {
+            "value": "perro",
+            "label": "Perro"
+          },
+          {
+            "value": "gato",
+            "label": "Gato"
+          },
+          {
+            "value": "ave",
+            "label": "Ave"
+          },
+          {
+            "value": "otro",
+            "label": "Otro"
+          }
+        ]
+      },
+      {
+        "key": "raza",
+        "label": "Raza",
+        "data_type": "text",
+        "position": 30
+      },
+      {
+        "key": "fecha_nacimiento",
+        "label": "Fecha de nacimiento",
+        "data_type": "date",
+        "ui_widget": "date_picker",
+        "position": 40
+      },
+      {
+        "key": "peso_kg",
+        "label": "Peso",
+        "data_type": "number",
+        "unit_suffix": "kg",
+        "position": 50
+      },
+      {
+        "key": "esterilizado",
+        "label": "Esterilizado/a",
+        "data_type": "boolean",
+        "ui_widget": "toggle",
+        "position": 60
+      },
+      {
+        "key": "alergias",
+        "label": "Alergias / condiciones",
+        "data_type": "text",
+        "ui_widget": "textarea",
+        "position": 70
+      },
+      {
+        "key": "veterinario_preferido",
+        "label": "Veterinario preferido",
+        "data_type": "uuid_ref",
+        "ui_widget": "select",
+        "ref_entity": "employee",
+        "position": 80
+      }
+    ],
+    "employee": [
+      {
+        "key": "especialidades",
+        "label": "Especialidades",
+        "data_type": "multi_enum",
+        "ui_widget": "chips",
+        "position": 10,
+        "options": [
+          {
+            "value": "cirugia",
+            "label": "Cirugía"
+          },
+          {
+            "value": "dermatologia",
+            "label": "Dermatología"
+          },
+          {
+            "value": "vacunacion",
+            "label": "Vacunación"
+          },
+          {
+            "value": "estetica",
+            "label": "Estética"
+          },
+          {
+            "value": "exoticos",
+            "label": "Animales exóticos"
+          }
+        ]
+      },
+      {
+        "key": "nivel",
+        "label": "Nivel",
+        "data_type": "enum",
+        "ui_widget": "segmented",
+        "position": 20,
+        "options": [
+          {
+            "value": "asistente",
+            "label": "Asistente"
+          },
+          {
+            "value": "veterinario",
+            "label": "Veterinario"
+          },
+          {
+            "value": "cirujano",
+            "label": "Cirujano"
+          }
+        ]
+      }
+    ]
+  },
+  "product_defaults": {
+    "track_inventory": true,
+    "track_lots": true,
+    "track_expiry": true,
+    "track_serials": false,
+    "is_sellable": true
+  },
+  "appointments": {
+    "slot_minutes": 20,
+    "advance_booking_days": 30,
+    "min_notice_minutes": 60,
+    "allow_online_booking": true,
+    "require_deposit": false,
+    "deposit_pct": 0,
+    "no_show_policy": {
+      "track": true,
+      "block_after": 3
+    },
+    "reminders": [
+      {
+        "offset_hours": -24,
+        "channel": "whatsapp"
+      },
+      {
+        "offset_hours": -2,
+        "channel": "whatsapp"
+      }
+    ],
+    "resources": [
+      {
+        "kind": "consultorio",
+        "label": "Consultorio"
+      }
+    ]
+  },
+  "ui": {
+    "navigation": [
+      {
+        "key": "agenda",
+        "label": "Agenda",
+        "icon": "calendar",
+        "route": "/agenda",
+        "primary": true
+      },
+      {
+        "key": "pos",
+        "label": "Cobrar",
+        "icon": "shopping-cart",
+        "route": "/pos"
+      },
+      {
+        "key": "customers",
+        "label": "Mascotas",
+        "icon": "paw",
+        "route": "/clientes"
+      },
+      {
+        "key": "employees",
+        "label": "Equipo",
+        "icon": "user-check",
+        "route": "/equipo"
+      },
+      {
+        "key": "inventory",
+        "label": "Productos",
+        "icon": "package",
+        "route": "/inventario"
+      },
+      {
+        "key": "reports",
+        "label": "Reportes",
+        "icon": "bar-chart",
+        "route": "/reportes"
+      }
+    ],
+    "pos": {
+      "layout": "service_first",
+      "primary_action": "select_service",
+      "show_product_images": false,
+      "show_stock_badge": true,
+      "variant_selector": "none",
+      "quick_filters": [
+        "especie_objetivo"
+      ],
+      "keypad": "numeric",
+      "require_customer": true,
+      "require_employee_per_line": true,
+      "allow_tip": false
+    },
+    "product_form": {
+      "groups": [
+        "Básico",
+        "Servicio",
+        "Comercial",
+        "Precios"
+      ],
+      "hidden_fields": [
+        "age_restricted"
+      ]
+    },
+    "dashboard_widgets": [
+      "appointments_today",
+      "occupancy_rate",
+      "revenue_by_employee",
+      "commissions_pending",
+      "top_services",
+      "no_show_rate",
+      "avg_ticket",
+      "vaccination_due_soon"
+    ]
+  },
+  "receipt": {
+    "width_mm": 58,
+    "show_attributes": [
+      "duration_min"
+    ],
+    "show_employee_name": true,
+    "footer": "Gracias por confiarnos a tu mascota. Guarda este ticket para el seguimiento clínico.",
+    "show_qr_storefront": true
+  },
+  "roles": [
+    {
+      "code": "admin",
+      "name": "Administrador",
+      "permissions": [
+        "*"
+      ]
+    },
+    {
+      "code": "veterinario",
+      "name": "Veterinario",
+      "permissions": [
+        "appointments.read_own",
+        "appointments.update_own",
+        "sales.create",
+        "customers.read",
+        "customers.update",
+        "attendance.clock",
+        "commissions.read_own"
+      ],
+      "constraints": {
+        "scope": "own_appointments_only",
+        "max_discount_pct": 0
+      }
+    },
+    {
+      "code": "recepcion",
+      "name": "Recepción",
+      "permissions": [
+        "appointments.*",
+        "sales.create",
+        "sales.read",
+        "customers.*",
+        "cash.open",
+        "cash.close",
+        "credit.charge",
+        "credit.collect"
+      ],
+      "constraints": {
+        "max_discount_pct": 10,
+        "requires_supervisor_pin": [
+          "sales.void"
+        ]
+      }
+    },
+    {
+      "code": "contador",
+      "name": "Contador",
+      "permissions": [
+        "reports.*",
+        "finance.read",
+        "taxes.*",
+        "expenses.*",
+        "payroll.read"
+      ]
+    }
+  ],
+  "automations": [
+    {
+      "key": "appointment_reminder",
+      "enabled": true,
+      "config": {
+        "offsets_hours": [
+          -24,
+          -2
+        ],
+        "channel": "whatsapp"
+      }
+    },
+    {
+      "key": "vaccine_due_reminder",
+      "enabled": true,
+      "config": {
+        "days_before": [
+          7,
+          1
+        ],
+        "channel": "whatsapp"
+      }
+    },
+    {
+      "key": "rebooking_nudge",
+      "enabled": true,
+      "config": {
+        "days_after_visit": 180,
+        "channel": "whatsapp"
+      }
+    },
+    {
+      "key": "loyalty_stamps",
+      "enabled": true,
+      "config": {
+        "stamps_needed": 8,
+        "reward": "bano_gratis"
+      }
+    },
+    {
+      "key": "expiry_alert",
+      "enabled": true,
+      "config": {
+        "days_before": [
+          30,
+          7
+        ]
+      }
+    },
+    {
+      "key": "collection_reminder",
+      "enabled": true,
+      "config": {
+        "offsets_days": [
+          -1,
+          5
+        ],
+        "channel": "whatsapp"
+      }
+    }
+  ],
+  "reports": [
+    "revenue_by_employee",
+    "occupancy_by_hour",
+    "service_mix",
+    "vaccination_compliance",
+    "customer_retention",
+    "no_show_analysis",
+    "product_attach_rate"
+  ]
+}$manifest$::jsonb,
+       'published', now(), 'Generado desde config/profiles/veterinaria.json'
+  FROM platform.business_profiles bp WHERE bp.slug = 'veterinaria'
 ON CONFLICT (profile_id, version) DO UPDATE
   SET manifest = EXCLUDED.manifest,
       status = 'published',

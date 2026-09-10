@@ -29,7 +29,7 @@ _legacy/     Proyectos anteriores en proceso de port  (no versionado)
 
 ### Los tres pilares
 
-**1 · El rubro es configuración, no código.** [`config/profiles/`](config/profiles/) tiene 9 manifiestos. Cada uno declara sus campos, módulos, roles, alertas y layout de POS. Un rubro nuevo es un archivo JSON, no una versión del programa.
+**1 · El rubro es configuración, no código.** [`config/profiles/`](config/profiles/) tiene 12 manifiestos. Cada uno declara sus campos, módulos, roles, alertas y layout de POS. Un rubro nuevo es un archivo JSON, no una versión del programa.
 
 **2 · El inventario es un ledger, no un número.** `stock_events` guarda deltas inmutables. Dos cajas vendiendo sin internet **convergen al saldo correcto** sin importar el orden de sincronización, y ninguna venta se pierde.
 
@@ -69,7 +69,7 @@ npm ci
 npm run check
 ```
 
-Valida los 9 manifiestos, regenera las semillas, aplica los 20 archivos de esquema y corre **105 aserciones** sobre PostgreSQL real (PGlite, compilado a WASM). Tarda unos 30 segundos.
+Valida los 12 manifiestos, regenera las semillas, aplica los 20 archivos de esquema y corre **105 aserciones** sobre PostgreSQL real (PGlite, compilado a WASM). Tarda unos 30 segundos.
 
 ### Ver el Engine de Nicho funcionando
 
@@ -120,7 +120,7 @@ Ya resuelto y documentado: **Supabase** (PostgreSQL) · **Railway** (API + jobs)
 | | |
 |---|---|
 | Modelo de datos | ✅ 130 tablas, 9 vistas, 121 policies RLS · 105/105 tests |
-| Manifiestos de rubro | ✅ 9 válidos, 140 permisos, 16 módulos registrados |
+| Manifiestos de rubro | ✅ 12 válidos, 140 permisos, 16 módulos registrados |
 | Plataforma (auth, pagos, jobs, deploy) | ✅ En producción desde Turno |
 | Módulo `appointments` | ✅ En producción |
 | Módulos `pos` `credit` `inventory` `storefront` `cash` | ⬜ Port desde `_legacy/` |

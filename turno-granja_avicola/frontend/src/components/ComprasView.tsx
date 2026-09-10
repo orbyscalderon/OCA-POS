@@ -1,12 +1,13 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
+import { hoyLocal, formatFechaLocal } from "../dateUtils";
 
 // Módulo COMPRAS (reposición de inventario desde proveedores).
 interface Producto { id: string; nombre: string; costo: string | number | null }
 interface LineaCompra { productoId?: string; nombre: string; cantidad: number; costoUnit: number }
 interface Compra { id: string; proveedor: string | null; total: string | number; fecha: string; lineas: { nombre: string; cantidad: string | number; costoUnit: string | number }[] }
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
-const hoy = () => new Date().toISOString().slice(0, 10);
+const hoy = hoyLocal;
 
 export function ComprasView({ negocio }: { negocio: Negocio }) {
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -82,7 +83,7 @@ export function ComprasView({ negocio }: { negocio: Negocio }) {
         <div style={{ marginTop: 14 }}>
           <strong className="small">Compras recientes</strong>
           {compras.slice(0, 8).map((c) => (
-            <div className="list-item" key={c.id}><span className="muted small">{new Date(c.fecha).toLocaleDateString()} · {c.proveedor ?? "—"} · {c.lineas.length} ítems</span><strong>{money(c.total)}</strong></div>
+            <div className="list-item" key={c.id}><span className="muted small">{formatFechaLocal(c.fecha)} · {c.proveedor ?? "—"} · {c.lineas.length} ítems</span><strong>{money(c.total)}</strong></div>
           ))}
         </div>
       )}

@@ -43,9 +43,14 @@ posRouter.post(
   asyncHandler(async (req, res) => {
     const { negocioId, montoInicial } = z.object({ negocioId: z.string().min(1), montoInicial: z.coerce.number().min(0) }).parse(req.body);
     await assertDueno(negocioId, req.user!.sub, req.user!.rol);
-    const abierta = await prisma.sesionCaja.findFirst({ where: { negocioId, estado: "abierta" } });
-    if (abierta) throw Conflict("Ya hay una caja abierta", "CAJA_ABIERTA");
-    const sesion = await prisma.sesionCaja.create({ data: { negocioId, montoInicial } });
+    const sesion = await prisma.$transaction(async (tx) => {
+      // Bloquea el negocio antes de comprobar: dos "abrir caja" concurrentes no deben
+      // pasar ambos el chequeo y crear dos sesiones abiertas a la vez.
+      await tx.$queryRaw`SELECT id FROM "negocios" WHERE id = ${negocioId} FOR UPDATE`;
+      const abierta = await tx.sesionCaja.findFirst({ where: { negocioId, estado: "abierta" } });
+      if (abierta) throw Conflict("Ya hay una caja abierta", "CAJA_ABIERTA");
+      return tx.sesionCaja.create({ data: { negocioId, montoInicial } });
+    });
     res.status(201).json({ sesion });
   }),
 );
@@ -103,7 +108,10 @@ posRouter.post(
       const impLinea = round2((sub * imp) / 100);
       subtotal = round2(subtotal + sub);
       impuesto = round2(impuesto + impLinea);
-      return { productoId: l.productoId ?? null, nombre: l.nombre, cantidad: l.cantidad, precioUnit: l.precioUnit, subtotal: round2(sub + impLinea) };
+      // Solo se persiste el productoId si es un producto real de este negocio: evita
+      // que una línea quede con una referencia colgante a un producto de otro tenant.
+      const productoId = l.productoId && mapProd.has(l.productoId) ? l.productoId : null;
+      return { productoId, nombre: l.nombre, cantidad: l.cantidad, precioUnit: l.precioUnit, subtotal: round2(sub + impLinea) };
     });
     const total = round2(subtotal + impuesto);
 

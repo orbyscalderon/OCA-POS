@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, assetUrl, formatPrecio, descargarCSV, MONEDAS, type Servicio, type Negocio } from "../api";
 import { useT } from "../i18n";
 import { Empty, Stat } from "./Ui";
+import { hoyLocal } from "../dateUtils";
 
 const DIAS = ["lunes", "martes", "miercoles", "jueves", "viernes", "sabado", "domingo"] as const;
 type Dia = (typeof DIAS)[number];
@@ -356,7 +357,7 @@ function Agenda() {
   const { t } = useT();
   const [reservas, setReservas] = useState<any[]>([]);
   useEffect(() => {
-    const hoy = new Date().toISOString().slice(0, 10);
+    const hoy = hoyLocal();
     api.get<{ reservas: any[] }>(`/reservas/agenda?desde=${hoy}`).then((r) => setReservas(r.reservas));
   }, []);
 

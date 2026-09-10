@@ -55,6 +55,13 @@ export class ApiError extends Error {
   }
 }
 
+// La UI (AuthProvider) se suscribe para enterarse cuando la sesión deja de ser válida
+// y así limpiar el usuario en pantalla en vez de quedar "logueado" mostrando pantallas rotas.
+let onSessionExpired: (() => void) | null = null;
+export function setSessionExpiredHandler(fn: (() => void) | null) {
+  onSessionExpired = fn;
+}
+
 // Renueva el token de acceso con el refresh token. Evita renovaciones simultáneas.
 let refreshing: Promise<boolean> | null = null;
 async function intentarRefrescar(): Promise<boolean> {
@@ -75,7 +82,14 @@ async function intentarRefrescar(): Promise<boolean> {
       .catch(() => false)
       .finally(() => { refreshing = null; });
   }
-  return refreshing;
+  const ok = await refreshing;
+  if (!ok) {
+    // El refresh token expiró o fue revocado: cierra la sesión de verdad en vez de
+    // dejar al usuario "logueado" viendo pantallas que fallan en silencio.
+    setSession(null, null);
+    onSessionExpired?.();
+  }
+  return ok;
 }
 
 async function request<T>(method: string, path: string, body?: unknown, _retry = false): Promise<T> {
@@ -103,6 +117,25 @@ async function request<T>(method: string, path: string, body?: unknown, _retry =
   return data as T;
 }
 
+// Descarga autenticada de un archivo binario (p. ej. export GDPR), con el mismo
+// manejo de 401/refresh y de errores que `request()` (a diferencia de un fetch suelto).
+async function downloadFile(path: string, _retry = false): Promise<Blob> {
+  const headers: Record<string, string> = {};
+  const token = getToken();
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(`${API_BASE}/api${path}`, { headers });
+
+  if (res.status === 401 && !_retry && (await intentarRefrescar())) {
+    return downloadFile(path, true);
+  }
+  if (!res.ok) {
+    const text = await res.text();
+    const data = text ? JSON.parse(text) : null;
+    throw new ApiError(res.status, data?.error ?? "Error de red", data?.code);
+  }
+  return res.blob();
+}
+
 async function uploadFile<T>(path: string, campo: string, file: File): Promise<T> {
   const fd = new FormData();
   fd.append(campo, file);
@@ -123,6 +156,7 @@ export const api = {
   patch: <T>(path: string, body?: unknown) => request<T>("PATCH", path, body),
   del: <T>(path: string) => request<T>("DELETE", path),
   upload: uploadFile,
+  download: downloadFile,
 };
 
 // ----- Tipos compartidos -----

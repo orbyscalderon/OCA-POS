@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api, getToken, apiUrl } from "../api";
+import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
 import { useT } from "../i18n";
 
@@ -17,16 +17,18 @@ export function AccountBar() {
     setMsg(r.mensaje);
   }
 
-  function exportar() {
-    // Descarga autenticada del export GDPR.
-    fetch(apiUrl("/api/auth/me/export"), { headers: { Authorization: `Bearer ${getToken()}` } })
-      .then((r) => r.blob())
-      .then((blob) => {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url; a.download = "mis-datos-turno.json"; a.click();
-        URL.revokeObjectURL(url);
-      });
+  async function exportar() {
+    // Descarga autenticada del export GDPR (con reintento de token y manejo de errores:
+    // antes, un 401/500 se descargaba tal cual como si fuera el archivo de datos).
+    try {
+      const blob = await api.download("/auth/me/export");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url; a.download = "mis-datos-turno.json"; a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setMsg(err instanceof ApiError ? err.message : "No se pudo exportar tus datos");
+    }
   }
 
   async function borrar() {

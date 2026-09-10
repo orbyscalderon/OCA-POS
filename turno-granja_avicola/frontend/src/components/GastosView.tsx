@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
+import { hoyLocal, formatFechaLocal } from "../dateUtils";
 
 // Módulo GASTOS (casi todos los rubros).
 interface Gasto { id: string; categoria: string | null; descripcion: string; monto: string | number; fecha: string }
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
-const hoy = () => new Date().toISOString().slice(0, 10);
-const mesActual = () => new Date().toISOString().slice(0, 7);
+const hoy = hoyLocal;
+const mesActual = () => hoyLocal().slice(0, 7);
 
 export function GastosView({ negocio }: { negocio: Negocio }) {
   const [gastos, setGastos] = useState<Gasto[]>([]);
@@ -45,7 +46,7 @@ export function GastosView({ negocio }: { negocio: Negocio }) {
       {error && <p className="error small">{error}</p>}
       {gastos.map((g) => (
         <div className="list-item" key={g.id}>
-          <div><strong>{g.descripcion}</strong> {g.categoria ? <span className="muted small">· {g.categoria}</span> : null}<br /><span className="muted small">{new Date(g.fecha).toLocaleDateString()}</span></div>
+          <div><strong>{g.descripcion}</strong> {g.categoria ? <span className="muted small">· {g.categoria}</span> : null}<br /><span className="muted small">{formatFechaLocal(g.fecha)}</span></div>
           <div className="row"><strong>{money(g.monto)}</strong><button className="ghost small" onClick={() => borrar(g.id)}>✕</button></div>
         </div>
       ))}

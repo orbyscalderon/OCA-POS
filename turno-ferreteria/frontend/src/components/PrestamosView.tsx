@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
+import { hoyLocal, formatFechaLocal, fechaVencida } from "../dateUtils";
 
 // Módulo de PRÉSTAMOS (rubro prestamista). Se muestra en el panel del negocio.
 interface PrestamoResumen {
@@ -15,8 +16,8 @@ interface Cuota {
 interface PrestamoDetalle extends PrestamoResumen { cuotas: Cuota[] }
 
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
-const fecha = (s: string | null) => (s ? new Date(s).toLocaleDateString() : "—");
-const hoy = () => new Date().toISOString().slice(0, 10);
+const fecha = (s: string | null) => (s ? formatFechaLocal(s) : "—");
+const hoy = hoyLocal;
 
 export function PrestamosView({ negocio }: { negocio: Negocio }) {
   const [prestamos, setPrestamos] = useState<PrestamoResumen[]>([]);
@@ -181,7 +182,7 @@ function Detalle({ prestamoId, onPago }: { prestamoId: string; onPago: () => voi
           </thead>
           <tbody>
             {det.cuotas.map((c) => {
-              const vencida = !c.pagada && new Date(c.fechaVencimiento) < new Date();
+              const vencida = !c.pagada && fechaVencida(c.fechaVencimiento);
               return (
                 <tr key={c.id} style={{ borderTop: "1px solid var(--border)" }}>
                   <td style={{ padding: "4px 6px" }}>{c.numero}</td>

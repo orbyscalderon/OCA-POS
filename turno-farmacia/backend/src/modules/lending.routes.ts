@@ -9,6 +9,7 @@ import { calcularAmortizacion } from "../lib/amortizacion.js";
 export const lendingRouter = Router();
 
 const round2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
+const inicioDeHoyUTC = () => { const d = new Date(); d.setUTCHours(0, 0, 0, 0); return d; };
 
 // Verifica que el negocio pertenezca al usuario (el superadmin queda exento).
 async function assertDueno(negocioId: string, userId: number, rol: string) {
@@ -36,7 +37,10 @@ function resumen(p: { id: string; deudorNombre: string; deudorTelefono: string |
     cuotasPagadas: p.cuotas.filter((c) => c.pagada).length,
     saldoPendiente,
     proximaCuota: impagas[0]?.fechaVencimiento ?? null,
-    enMora: impagas.some((c) => c.fechaVencimiento < new Date()),
+    // Compara por día calendario (no por instante exacto): una cuota con vencimiento
+    // "hoy" a medianoche UTC no debe marcarse en mora horas antes de que termine el día
+    // en negocios con huso horario detrás de UTC (todo Latinoamérica).
+    enMora: impagas.some((c) => c.fechaVencimiento < inicioDeHoyUTC()),
   };
 }
 
@@ -146,7 +150,11 @@ lendingRouter.post(
     let restante = monto;
     const ahora = new Date();
     await prisma.$transaction(async (tx) => {
-      for (const c of p.cuotas) {
+      // Bloquea la fila del préstamo y relee las cuotas dentro de la transacción:
+      // dos pagos concurrentes sobre el mismo préstamo no deben pisarse (lost update).
+      await tx.$queryRaw`SELECT id FROM "prestamos" WHERE id = ${p.id} FOR UPDATE`;
+      const cuotas = await tx.cuotaPrestamo.findMany({ where: { prestamoId: p.id }, orderBy: { numero: "asc" } });
+      for (const c of cuotas) {
         if (restante <= 0) break;
         if (c.pagada) continue;
         const pendiente = Number(c.monto) - Number(c.montoPagado);

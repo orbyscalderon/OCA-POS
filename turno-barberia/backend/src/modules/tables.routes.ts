@@ -47,6 +47,12 @@ tablesRouter.post("/mesas", requireAuth, requireRole("admin_negocio"), asyncHand
 tablesRouter.post("/comandas", requireAuth, requireRole("admin_negocio"), asyncHandler(async (req, res) => {
   const { negocioId, mesaId } = z.object({ negocioId: z.string().min(1), mesaId: z.string().optional() }).parse(req.body);
   await assertDueno(negocioId, req.user!.sub, req.user!.rol);
+  if (mesaId) {
+    // La mesa debe ser del mismo negocio: si no, sería posible abrir comandas
+    // sobre mesas de otro tenant (fuga de datos entre negocios).
+    const mesa = await prisma.mesa.findUnique({ where: { id: mesaId }, select: { negocioId: true } });
+    if (!mesa || mesa.negocioId !== negocioId) throw NotFound("Mesa no encontrada");
+  }
   const comanda = await prisma.comanda.create({ data: { negocioId, mesaId: mesaId ?? null } });
   if (mesaId) await prisma.mesa.update({ where: { id: mesaId }, data: { estado: "ocupada" } });
   res.status(201).json({ comanda });

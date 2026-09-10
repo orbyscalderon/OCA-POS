@@ -102,15 +102,15 @@ inventoryRouter.post(
     if (!p) throw NotFound("Producto no encontrado");
     await assertDueno(p.negocioId, req.user!.sub, req.user!.rol);
 
-    const stockActual = Number(p.stock);
-    let nuevoStock: number;
+    // Delta aplicado con `increment` (atómico en la BD): dos ajustes/ventas concurrentes
+    // sobre el mismo producto no se pisan entre sí (evita perder movimientos de stock).
     let delta: number;
-    if (d.tipo === "ajuste") { nuevoStock = d.cantidad; delta = d.cantidad - stockActual; }
-    else if (d.tipo === "entrada") { delta = Math.abs(d.cantidad); nuevoStock = stockActual + delta; }
-    else { delta = -Math.abs(d.cantidad); nuevoStock = stockActual + delta; }
+    if (d.tipo === "ajuste") delta = d.cantidad - Number(p.stock);
+    else if (d.tipo === "entrada") delta = Math.abs(d.cantidad);
+    else delta = -Math.abs(d.cantidad);
 
     const [producto] = await prisma.$transaction([
-      prisma.producto.update({ where: { id: p.id }, data: { stock: nuevoStock } }),
+      prisma.producto.update({ where: { id: p.id }, data: { stock: { increment: delta } } }),
       prisma.movimientoStock.create({ data: { productoId: p.id, tipo: d.tipo, cantidad: delta, motivo: d.motivo ?? null } }),
     ]);
     res.json({ producto });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
 import { Stat } from "./Ui";
+import { hoyLocal, formatFechaLocal } from "../dateUtils";
 
 // Módulo AGRO (granja avícola): lotes/camadas con mortalidad, alimento y conversión (FCR).
 interface LoteResumen {
@@ -8,8 +9,8 @@ interface LoteResumen {
   estado: string; avesVivas: number; mortalidadPct: number; alimentoTotalKg: number; produccionTotal: number; edadDias: number; fcr: number | null;
 }
 interface Registro { id: string; fecha: string; mortalidad: number; alimentoKg: string | number; pesoPromedioG: string | number | null; produccion: number; notas: string | null }
-const hoy = () => new Date().toISOString().slice(0, 10);
-const fecha = (s: string) => new Date(s).toLocaleDateString();
+const hoy = hoyLocal;
+const fecha = formatFechaLocal;
 
 export function AgroView({ negocio }: { negocio: Negocio }) {
   const [lotes, setLotes] = useState<LoteResumen[]>([]);

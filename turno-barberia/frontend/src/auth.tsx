@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, setToken, getToken, setSession, getRefreshToken, setRefreshToken, type Usuario } from "./api";
+import { api, setToken, getToken, setSession, getRefreshToken, setRefreshToken, setSessionExpiredHandler, type Usuario } from "./api";
 
 interface AuthState {
   usuario: Usuario | null;
@@ -24,6 +24,13 @@ const AuthContext = createContext<AuthState | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [usuario, setUsuario] = useState<Usuario | null>(null);
   const [cargando, setCargando] = useState(true);
+
+  useEffect(() => {
+    // Si el refresh token expira/se revoca en cualquier momento (no solo al montar),
+    // api.ts avisa acá para que la UI deje de mostrarse como "logueada".
+    setSessionExpiredHandler(() => setUsuario(null));
+    return () => setSessionExpiredHandler(null);
+  }, []);
 
   useEffect(() => {
     const token = getToken();

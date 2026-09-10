@@ -324,6 +324,12 @@ reservasRouter.post(
       return res.json({ ok: true, estado: "cancelada" });
     }
 
+    // Idempotencia: Stripe puede reintentar/duplicar la entrega del webhook.
+    // Sin este chequeo, cada reintento reenviaría el WhatsApp/email de confirmación.
+    if (reserva.pagoReservaStatus === "pagado") {
+      return res.json({ ok: true, estado: "confirmada", yaConfirmada: true });
+    }
+
     const whatsappUrl = await confirmarReservaPagada(reserva.id);
     res.json({ ok: true, estado: "confirmada", whatsappUrl });
   }),

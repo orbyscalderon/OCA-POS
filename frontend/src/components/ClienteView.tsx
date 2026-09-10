@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api, ApiError, assetUrl, formatPrecio, categoriaLabel, categoriaEmoji, categoriaGrad, mapsUrl, CATEGORIAS, type Negocio, type Peluquero, type Servicio, type Slot, type Reserva } from "../api";
 import { Stars } from "./Stars";
 import { useT } from "../i18n";
 import { Empty, SkeletonCards } from "./Ui";
+import { hoyLocal } from "../dateUtils";
 
 type Tab = "reservar" | "historial";
 
@@ -24,9 +25,7 @@ export function ClienteView() {
   );
 }
 
-function fechaHoy(): string {
-  return new Date().toISOString().slice(0, 10);
-}
+const fechaHoy = hoyLocal;
 
 // Iniciales (máx 2) a partir de un nombre.
 function iniciales(nombre: string): string {
@@ -81,6 +80,7 @@ function FlujoReserva({ onReservado }: { onReservado: () => void }) {
   const [coords, setCoords] = useState<{ lat: number; lng: number } | null>(null);
   const [ubicando, setUbicando] = useState(false);
   const [montoFianza, setMontoFianza] = useState(2);
+  const slotsPeticionId = useRef(0);
 
   // Monto real de la fianza (el cliente puede asumir el fee de Stripe según configuración).
   useEffect(() => { api.get<{ montoCobradoUsd: number }>("/reservas/split").then((s) => setMontoFianza(s.montoCobradoUsd)).catch(() => {}); }, []);
@@ -136,13 +136,17 @@ function FlujoReserva({ onReservado }: { onReservado: () => void }) {
   async function cargarSlots(s: Servicio, f: string) {
     if (!peluquero) return;
     setSlot(null);
+    // Descarta la respuesta si el usuario ya cambió de fecha/servicio mientras esta
+    // petición estaba en vuelo (evita que una respuesta lenta y desactualizada pise
+    // a una más nueva y muestre los horarios de la fecha equivocada).
+    const idPeticion = ++slotsPeticionId.current;
     try {
       const r = await api.get<{ slots: Slot[] }>(
         `/reservas/slots?peluqueroId=${peluquero.id}&servicioId=${s.id}&fecha=${f}`,
       );
-      setSlots(r.slots);
+      if (idPeticion === slotsPeticionId.current) setSlots(r.slots);
     } catch {
-      setSlots([]);
+      if (idPeticion === slotsPeticionId.current) setSlots([]);
     }
   }
 

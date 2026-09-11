@@ -44,7 +44,9 @@ export function AdminView() {
   if (negocio) {
     return (
       <div className="container-wide">
-        <GestionEquipo negocio={negocio} onVolver={() => setNegocio(null)} />
+        {/* "Volver" solo tiene sentido si hay otro negocio al que cambiar — con uno solo,
+            volver a una lista de un único ítem no lleva a ningún lado útil. */}
+        <GestionEquipo negocio={negocio} onVolver={negocios.length > 1 ? () => setNegocio(null) : undefined} />
       </div>
     );
   }
@@ -228,7 +230,7 @@ function TiendaLink({ slug }: { slug: string }) {
   );
 }
 
-function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () => void }) {
+function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () => void }) {
   const { t } = useT();
   const [miembros, setMiembros] = useState<Miembro[]>([]);
   const [activos, setActivos] = useState(0);
@@ -386,7 +388,7 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
     <div>
       <div className="row spread">
         <h1>{negocio.nombreComercial}</h1>
-        <button className="ghost" onClick={onVolver}>{t("common.back")}</button>
+        {onVolver && <button className="ghost" onClick={onVolver}>{t("common.back")}</button>}
       </div>
 
       {miRol && miRol !== "dueno" && (

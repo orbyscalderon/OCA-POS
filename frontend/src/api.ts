@@ -1,4 +1,5 @@
 // Cliente HTTP de la API de Turno. Adjunta el JWT y renueva con el refresh token ante un 401.
+import type { TKey } from "./i18n";
 
 // Base del backend. En dev queda vacía (rutas relativas + proxy de Vite).
 // En producción se define VITE_API_URL al build (p. ej. la URL de Railway).
@@ -165,14 +166,16 @@ export type Rol = "superadmin" | "admin_negocio" | "peluquero" | "cliente";
 // Rol funcional del usuario DENTRO de un negocio concreto (personal, no el rol global de
 // la cuenta). "dueno" = es el dueño; los demás son personal invitado con ese rol.
 export type RolNegocio = "dueno" | "gerente" | "cajero" | "inventario" | "contador";
-export const ROLES_ASIGNABLES: { value: Exclude<RolNegocio, "dueno">; label: string }[] = [
-  { value: "gerente", label: "Gerente (acceso total)" },
-  { value: "cajero", label: "Cajero (vender y caja)" },
-  { value: "inventario", label: "Inventario (productos y compras)" },
-  { value: "contador", label: "Contador (gastos y reportes)" },
+export const ROLES_ASIGNABLES: { value: Exclude<RolNegocio, "dueno">; shortKey: TKey; labelKey: TKey }[] = [
+  { value: "gerente", shortKey: "roles.gerente", labelKey: "roles.gerenteFull" },
+  { value: "cajero", shortKey: "roles.cajero", labelKey: "roles.cajeroFull" },
+  { value: "inventario", shortKey: "roles.inventario", labelKey: "roles.inventarioFull" },
+  { value: "contador", shortKey: "roles.contador", labelKey: "roles.contadorFull" },
 ];
-export function rolNegocioLabel(rol: string): string {
-  return ROLES_ASIGNABLES.find((r) => r.value === rol)?.label.split(" (")[0] ?? rol;
+// `t` se pasa desde el componente (useT) porque este archivo no es un componente React.
+export function rolNegocioLabel(rol: string, t: (key: TKey) => string): string {
+  const found = ROLES_ASIGNABLES.find((r) => r.value === rol);
+  return found ? t(found.shortKey) : rol;
 }
 
 // Espejo del capacidades del backend (lib/acceso.ts): qué secciones puede ver cada rol.

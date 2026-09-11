@@ -1,3 +1,5 @@
+import { useT } from "../i18n";
+
 // Muestra u obtiene una puntuación de 1 a 5 estrellas.
 export function Stars({
   valor,
@@ -8,6 +10,7 @@ export function Stars({
   onChange?: (v: number) => void;
   size?: number;
 }) {
+  const { t } = useT();
   return (
     <span style={{ display: "inline-flex", gap: 2 }}>
       {[1, 2, 3, 4, 5].map((n) => (
@@ -21,7 +24,7 @@ export function Stars({
             lineHeight: 1,
           }}
           role={onChange ? "button" : undefined}
-          aria-label={`${n} estrellas`}
+          aria-label={`${n} ${t("common.stars")}`}
         >
           ★
         </span>

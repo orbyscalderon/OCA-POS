@@ -42,7 +42,7 @@ export function AdminView() {
                 <div>
                   <h3>{n.nombreComercial}</h3>
                   <span className="muted small">{n.direccion}</span>
-                  {n.miRol && n.miRol !== "dueno" && <> · <span className="badge">{rolNegocioLabel(n.miRol)}</span></>}
+                  {n.miRol && n.miRol !== "dueno" && <> · <span className="badge">{rolNegocioLabel(n.miRol, t)}</span></>}
                 </div>
                 <button className="primary" onClick={() => setNegocio(n)}>{t("own.manage")}</button>
               </div>
@@ -177,16 +177,17 @@ function CrearNegocio({ onCreado }: { onCreado: () => void }) {
 
 // Tienda online: enlace público para compartir (módulo storefront).
 function TiendaLink({ slug }: { slug: string }) {
+  const { t } = useT();
   const url = `${window.location.origin}/tienda/${slug}`;
   const [copiado, setCopiado] = useState(false);
   return (
     <div className="card">
-      <h2>🛍️ Tienda online</h2>
-      <p className="muted small">Comparte este enlace: tus clientes ven tu catálogo y te piden por WhatsApp.</p>
+      <h2>{t("admin.storeTitle")}</h2>
+      <p className="muted small">{t("admin.storeShare")}</p>
       <div className="row" style={{ marginTop: 8 }}>
         <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-        <button className="ghost" onClick={() => { navigator.clipboard?.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>{copiado ? "¡Copiado!" : "Copiar"}</button>
-        <a href={url} target="_blank" rel="noreferrer"><button className="ghost">Abrir</button></a>
+        <button className="ghost" onClick={() => { navigator.clipboard?.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>{copiado ? t("admin.copied") : t("admin.copy")}</button>
+        <a href={url} target="_blank" rel="noreferrer"><button className="ghost">{t("admin.open")}</button></a>
       </div>
     </div>
   );
@@ -242,7 +243,7 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
       </div>
 
       {miRol && miRol !== "dueno" && (
-        <p className="muted small">Entraste como <strong>{rolNegocioLabel(miRol)}</strong> — solo ves las secciones que tu rol permite.</p>
+        <p className="muted small">{t("admin.enteredAs")} <strong>{rolNegocioLabel(miRol, t)}</strong> {t("admin.roleRestriction")}</p>
       )}
 
       {esAdmin && (
@@ -322,6 +323,7 @@ interface MiembroFuncional {
 }
 
 function PersonalNegocio({ negocioId }: { negocioId: string }) {
+  const { t } = useT();
   const [miembros, setMiembros] = useState<MiembroFuncional[]>([]);
   const [rolInvitar, setRolInvitar] = useState<(typeof ROLES_ASIGNABLES)[number]["value"]>("cajero");
   const [url, setUrl] = useState("");
@@ -329,7 +331,7 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
 
   function cargar() {
     api.get<{ miembros: MiembroFuncional[] }>(`/negocios/${negocioId}/miembros`)
-      .then((r) => setMiembros(r.miembros)).catch((e) => setError(e instanceof ApiError ? e.message : "Error"));
+      .then((r) => setMiembros(r.miembros)).catch((e) => setError(e instanceof ApiError ? e.message : t("common.error")));
   }
   useEffect(cargar, [negocioId]);
 
@@ -339,7 +341,7 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
       const r = await api.post<{ url: string }>(`/negocios/${negocioId}/invitaciones`, { rol: rolInvitar });
       setUrl(r.url);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : "Error");
+      setError(e instanceof ApiError ? e.message : t("common.error"));
     }
   }
 
@@ -349,15 +351,15 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
   }
 
   async function quitar(m: MiembroFuncional) {
-    if (!confirm(`¿Quitar a ${m.usuario.nombre} del equipo?`)) return;
+    if (!confirm(`${t("admin.removeConfirm")} ${m.usuario.nombre} ${t("admin.removeConfirmSuffix")}`)) return;
     await api.del(`/negocios/${negocioId}/miembros/${m.id}`);
     cargar();
   }
 
   return (
     <div className="card">
-      <h2>👥 Personal y roles</h2>
-      <p className="muted small">Invita empleados con un rol que limita qué secciones pueden usar (además del dueño).</p>
+      <h2>{t("admin.staffTitle")}</h2>
+      <p className="muted small">{t("admin.staffIntro")}</p>
       {error && <p className="error small">{error}</p>}
 
       {miembros.map((m) => (
@@ -365,24 +367,24 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
           <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email}</span></div>
           <div className="row">
             <select value={m.rol} onChange={(e) => cambiarRol(m, e.target.value as RolNegocio)}>
-              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
             </select>
-            <button className="ghost small" onClick={() => quitar(m)}>Quitar</button>
+            <button className="ghost small" onClick={() => quitar(m)}>{t("admin.remove")}</button>
           </div>
         </div>
       ))}
-      {miembros.length === 0 && <p className="muted small">Sin personal invitado todavía.</p>}
+      {miembros.length === 0 && <p className="muted small">{t("admin.noStaffYet")}</p>}
 
       <div className="row" style={{ marginTop: 10 }}>
         <select value={rolInvitar} onChange={(e) => setRolInvitar(e.target.value as typeof rolInvitar)}>
-          {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+          {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
         </select>
-        <button className="primary" onClick={invitar}>+ Generar invitación</button>
+        <button className="primary" onClick={invitar}>{t("admin.generateInvite")}</button>
       </div>
       {url && (
         <div className="row" style={{ marginTop: 10 }}>
           <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-          <button className="ghost" onClick={() => navigator.clipboard?.writeText(url)}>Copiar</button>
+          <button className="ghost" onClick={() => navigator.clipboard?.writeText(url)}>{t("admin.copy")}</button>
         </div>
       )}
     </div>

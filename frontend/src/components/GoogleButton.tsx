@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { useT } from "../i18n";
 
 // ID de cliente de Google (build-time). Si está vacío, el botón no se muestra.
 const GOOGLE_CLIENT_ID = (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined)?.trim() || "";
@@ -48,6 +49,7 @@ interface Props {
  * VITE_GOOGLE_CLIENT_ID configurado (así el login normal sigue funcionando).
  */
 export function GoogleButton({ onCredential, texto = "continue_with" }: Props) {
+  const { t } = useT();
   const ref = useRef<HTMLDivElement>(null);
   const cbRef = useRef(onCredential);
   cbRef.current = onCredential;
@@ -84,7 +86,7 @@ export function GoogleButton({ onCredential, texto = "continue_with" }: Props) {
     <div style={{ marginTop: 16 }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "6px 0 14px" }}>
         <span style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.14)" }} />
-        <span className="small muted">o</span>
+        <span className="small muted">{t("common.or")}</span>
         <span style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.14)" }} />
       </div>
       <div ref={ref} style={{ display: "flex", justifyContent: "center" }} />

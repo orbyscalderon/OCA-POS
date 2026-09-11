@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, puedeNegocio, type Negocio, type RolNegocio } from "../api";
+import { useT } from "../i18n";
 
 // Módulo POS + Inventario + Caja (rubros de retail/alimentos: supermercado, vape, ferretería, farmacia…).
 interface Producto {
@@ -14,17 +15,18 @@ const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
 
 export function ComercioView({ negocio, miRol, credit = false }: { negocio: Negocio; miRol?: RolNegocio; credit?: boolean }) {
+  const { t } = useT();
   const vePos = puedeNegocio(miRol, "pos");
   const veInventario = puedeNegocio(miRol, "inventario");
   const veCaja = puedeNegocio(miRol, "caja");
   const [tab, setTab] = useState<"vender" | "productos" | "caja">(vePos ? "vender" : veInventario ? "productos" : "caja");
   return (
     <div className="card">
-      <h2>🛒 Comercio (POS)</h2>
+      <h2>{t("pos.title")}</h2>
       <div className="tabs" style={{ marginBottom: 12 }}>
-        {vePos && <button className={`tab ${tab === "vender" ? "active" : ""}`} onClick={() => setTab("vender")}>Vender</button>}
-        {veInventario && <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>Productos</button>}
-        {veCaja && <button className={`tab ${tab === "caja" ? "active" : ""}`} onClick={() => setTab("caja")}>Caja</button>}
+        {vePos && <button className={`tab ${tab === "vender" ? "active" : ""}`} onClick={() => setTab("vender")}>{t("pos.tabSell")}</button>}
+        {veInventario && <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>{t("pos.tabProducts")}</button>}
+        {veCaja && <button className={`tab ${tab === "caja" ? "active" : ""}`} onClick={() => setTab("caja")}>{t("pos.tabCash")}</button>}
       </div>
       {tab === "vender" && vePos && <Vender negocio={negocio} credit={credit} />}
       {tab === "productos" && veInventario && <Productos negocio={negocio} />}
@@ -38,6 +40,7 @@ interface LineaCarrito { productoId?: string; nombre: string; cantidad: number; 
 interface ClienteLite { id: string; nombre: string; telefono: string | null; saldoFiado: string | number }
 
 function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
+  const { t } = useT();
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<Producto[]>([]);
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
@@ -52,21 +55,21 @@ function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
   // Búsqueda de cliente para fiar la venta (solo si el rubro tiene el módulo de crédito).
   useEffect(() => {
     if (!credit || metodoPago !== "fiado" || !clienteQ.trim()) { setClienteResultados([]); return; }
-    const t = setTimeout(() => {
+    const t2 = setTimeout(() => {
       api.get<{ clientes: ClienteLite[] }>(`/clientes?negocioId=${negocio.id}&q=${encodeURIComponent(clienteQ)}`)
         .then((r) => setClienteResultados(r.clientes)).catch(() => {});
     }, 200);
-    return () => clearTimeout(t);
+    return () => clearTimeout(t2);
   }, [credit, metodoPago, clienteQ, negocio.id]);
 
   // Busca productos por nombre o código de barras (un escáner escribe el código + Enter).
   useEffect(() => {
     if (!busqueda.trim()) { setResultados([]); return; }
-    const t = setTimeout(() => {
+    const t2 = setTimeout(() => {
       api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}&q=${encodeURIComponent(busqueda)}`)
         .then((r) => setResultados(r.productos)).catch(() => {});
     }, 200);
-    return () => clearTimeout(t);
+    return () => clearTimeout(t2);
   }, [busqueda, negocio.id]);
 
   function agregar(p: Producto) {
@@ -94,25 +97,25 @@ function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
   async function cobrar() {
     setError(""); setMsg("");
     if (carrito.length === 0) return;
-    if (metodoPago === "fiado" && !clienteSel) { setError("Elige a qué cliente se le fía la venta."); return; }
+    if (metodoPago === "fiado" && !clienteSel) { setError(t("pos.chooseCustomer")); return; }
     try {
       await api.post("/pos/ventas", { negocioId: negocio.id, metodoPago, clienteId: clienteSel?.id, lineas: carrito });
-      setMsg(`Venta registrada: ${money(total)}`);
+      setMsg(`${t("pos.saleRegistered")}: ${money(total)}`);
       setCarrito([]); setClienteSel(null); setClienteQ("");
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : "Error al cobrar");
+      setError(err instanceof ApiError ? err.message : t("pos.chargeError"));
     }
   }
 
   return (
     <div>
-      <input ref={inputRef} placeholder="Escanea o busca un producto (nombre o código)…" value={busqueda}
+      <input ref={inputRef} placeholder={t("pos.searchPh")} value={busqueda}
         onChange={(e) => setBusqueda(e.target.value)} onKeyDown={onEnter} autoFocus />
       {resultados.length > 0 && (
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 220, overflowY: "auto" }}>
           {resultados.map((p) => (
             <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => agregar(p)}>
-              <div><strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br /><span className="muted small">Stock: {num(p.stock)} {p.unidad}</span></div>
+              <div><strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br /><span className="muted small">{t("pos.stock")}: {num(p.stock)} {p.unidad}</span></div>
               <strong>{money(p.precioVenta)}</strong>
             </div>
           ))}
@@ -120,40 +123,40 @@ function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
       )}
 
       {carrito.length === 0 ? (
-        <p className="muted small" style={{ marginTop: 12 }}>Carrito vacío. Escanea o busca productos para agregarlos.</p>
+        <p className="muted small" style={{ marginTop: 12 }}>{t("pos.emptyCart")}</p>
       ) : (
         <div style={{ marginTop: 12 }}>
           {carrito.map((l, i) => (
             <div className="list-item" key={i}>
               <div style={{ flex: 1 }}>
-                <strong>{l.nombre}</strong><br /><span className="muted small">{money(l.precioUnit)} c/u{l.impuestoPct > 0 ? ` · ITBIS ${l.impuestoPct}%` : ""}</span>
+                <strong>{l.nombre}</strong><br /><span className="muted small">{money(l.precioUnit)} {t("pos.each")}{l.impuestoPct > 0 ? ` · ITBIS ${l.impuestoPct}%` : ""}</span>
               </div>
               <input type="number" min="0" step="1" value={l.cantidad} onChange={(e) => setCant(i, Number(e.target.value))} style={{ width: 70 }} />
               <strong style={{ minWidth: 80, textAlign: "right" }}>{money(l.cantidad * l.precioUnit)}</strong>
             </div>
           ))}
           <div className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-            <div className="row spread"><span className="muted small">Subtotal</span><span>{money(subtotal)}</span></div>
-            {impuesto > 0 && <div className="row spread"><span className="muted small">Impuesto</span><span>{money(impuesto)}</span></div>}
-            <div className="row spread" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}><span>Total</span><span className="grad-text">{money(total)}</span></div>
-            <label style={{ marginTop: 10 }}>Método de pago</label>
+            <div className="row spread"><span className="muted small">{t("pos.subtotal")}</span><span>{money(subtotal)}</span></div>
+            {impuesto > 0 && <div className="row spread"><span className="muted small">{t("pos.tax")}</span><span>{money(impuesto)}</span></div>}
+            <div className="row spread" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}><span>{t("pos.total")}</span><span className="grad-text">{money(total)}</span></div>
+            <label style={{ marginTop: 10 }}>{t("pos.paymentMethod")}</label>
             <select value={metodoPago} onChange={(e) => { setMetodoPago(e.target.value); if (e.target.value !== "fiado") { setClienteSel(null); setClienteQ(""); } }}>
-              <option value="efectivo">Efectivo</option>
-              <option value="tarjeta">Tarjeta</option>
-              <option value="transferencia">Transferencia</option>
-              {credit && <option value="fiado">Fiado</option>}
-              <option value="otro">Otro</option>
+              <option value="efectivo">{t("pos.cash")}</option>
+              <option value="tarjeta">{t("pos.card")}</option>
+              <option value="transferencia">{t("pos.transfer")}</option>
+              {credit && <option value="fiado">{t("pos.credit")}</option>}
+              <option value="otro">{t("pos.other")}</option>
             </select>
             {metodoPago === "fiado" && (
               <div style={{ marginTop: 8 }}>
                 {clienteSel ? (
                   <div className="row spread">
-                    <span className="small">Fiado a <strong>{clienteSel.nombre}</strong> {Number(clienteSel.saldoFiado) > 0 && <span className="muted">(ya debe {money(clienteSel.saldoFiado)})</span>}</span>
-                    <button type="button" className="ghost small" onClick={() => setClienteSel(null)}>Cambiar</button>
+                    <span className="small">{t("pos.creditTo")} <strong>{clienteSel.nombre}</strong> {Number(clienteSel.saldoFiado) > 0 && <span className="muted">({t("pos.alreadyOwes")} {money(clienteSel.saldoFiado)})</span>}</span>
+                    <button type="button" className="ghost small" onClick={() => setClienteSel(null)}>{t("pos.change")}</button>
                   </div>
                 ) : (
                   <>
-                    <input placeholder="Busca el cliente por nombre o teléfono…" value={clienteQ} onChange={(e) => setClienteQ(e.target.value)} />
+                    <input placeholder={t("pos.searchCustomerPh")} value={clienteQ} onChange={(e) => setClienteQ(e.target.value)} />
                     {clienteResultados.length > 0 && (
                       <div className="card" style={{ background: "var(--surface-3)", marginTop: 6, maxHeight: 160, overflowY: "auto" }}>
                         {clienteResultados.map((c) => (
@@ -168,7 +171,7 @@ function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
                 )}
               </div>
             )}
-            <button className="primary" style={{ width: "100%", marginTop: 12 }} onClick={cobrar}>Cobrar {money(total)}</button>
+            <button className="primary" style={{ width: "100%", marginTop: 12 }} onClick={cobrar}>{t("pos.charge")} {money(total)}</button>
           </div>
         </div>
       )}
@@ -188,19 +191,20 @@ function formDeProducto(p: Producto): FormProducto {
 // Campos comunes del formulario (nombre/sku/categoría/precio/impuesto/stock mínimo).
 // `incluirStockInicial` solo aplica al crear: al editar el stock se mueve con +Entrada/−Salida.
 function CamposProducto({ f, onChange, incluirStockInicial }: { f: FormProducto; onChange: (f: FormProducto) => void; incluirStockInicial: boolean }) {
+  const { t } = useT();
   return (
     <>
-      <label>Nombre</label>
+      <label>{t("pos.name")}</label>
       <input value={f.nombre} onChange={(e) => onChange({ ...f, nombre: e.target.value })} required />
-      <label>Código de barras / SKU (opcional)</label>
+      <label>{t("pos.skuOpt")}</label>
       <input value={f.sku} onChange={(e) => onChange({ ...f, sku: e.target.value })} />
-      <label>Categoría (opcional)</label>
+      <label>{t("pos.categoryOpt")}</label>
       <input value={f.categoria} onChange={(e) => onChange({ ...f, categoria: e.target.value })} />
       <div className="grid grid-2">
-        <div><label>Precio de venta</label><input type="number" step="0.01" min="0" value={f.precioVenta} onChange={(e) => onChange({ ...f, precioVenta: e.target.value })} required /></div>
-        <div><label>Impuesto %</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => onChange({ ...f, impuestoPct: e.target.value })} /></div>
-        {incluirStockInicial && <div><label>Stock inicial</label><input type="number" step="0.001" value={f.stock} onChange={(e) => onChange({ ...f, stock: e.target.value })} /></div>}
-        <div><label>Stock mínimo</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
+        <div><label>{t("pos.salePrice")}</label><input type="number" step="0.01" min="0" value={f.precioVenta} onChange={(e) => onChange({ ...f, precioVenta: e.target.value })} required /></div>
+        <div><label>{t("pos.taxPct")}</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => onChange({ ...f, impuestoPct: e.target.value })} /></div>
+        {incluirStockInicial && <div><label>{t("pos.initialStock")}</label><input type="number" step="0.001" value={f.stock} onChange={(e) => onChange({ ...f, stock: e.target.value })} /></div>}
+        <div><label>{t("pos.minStock")}</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
       </div>
     </>
   );
@@ -208,6 +212,7 @@ function CamposProducto({ f, onChange, incluirStockInicial }: { f: FormProducto;
 
 // ---------- PRODUCTOS (Inventario) ----------
 function Productos({ negocio }: { negocio: Negocio }) {
+  const { t } = useT();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [nuevo, setNuevo] = useState(false);
   const [f, setF] = useState<FormProducto>(formVacio);
@@ -221,7 +226,7 @@ function Productos({ negocio }: { negocio: Negocio }) {
   async function crear(e: React.FormEvent) {
     e.preventDefault(); setError("");
     try { await api.post("/inventario", { ...f, negocioId: negocio.id }); setF(formVacio); setNuevo(false); cargar(); }
-    catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
+    catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
   function empezarEdicion(p: Producto) { setEditandoId(p.id); setFe(formDeProducto(p)); setError(""); }
@@ -234,11 +239,12 @@ function Productos({ negocio }: { negocio: Negocio }) {
       const { stock: _stock, ...cambios } = fe; // el stock no se toca por acá
       await api.patch(`/inventario/${editandoId}`, cambios);
       setEditandoId(null); cargar();
-    } catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
+    } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
   async function ajustar(p: Producto, tipo: "entrada" | "salida") {
-    const v = prompt(`${tipo === "entrada" ? "Entrada" : "Salida"} de stock para "${p.nombre}" (cantidad):`);
+    const etiqueta = tipo === "entrada" ? t("pos.stockInPrompt") : t("pos.stockOutPrompt");
+    const v = prompt(`${etiqueta} ${t("pos.stockPromptSuffix")} "${p.nombre}" (${t("pos.quantity")}):`);
     if (!v) return;
     await api.post(`/inventario/${p.id}/stock`, { tipo, cantidad: Number(v), motivo: tipo });
     cargar();
@@ -247,18 +253,18 @@ function Productos({ negocio }: { negocio: Negocio }) {
   return (
     <div>
       <div className="row spread">
-        <span className="muted small">{productos.length} productos</span>
-        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => { setNuevo((v) => !v); setEditandoId(null); }}>{nuevo ? "Cerrar" : "+ Producto"}</button>
+        <span className="muted small">{productos.length} {t("pos.products")}</span>
+        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => { setNuevo((v) => !v); setEditandoId(null); }}>{nuevo ? t("common.cancel") : t("pos.newProduct")}</button>
       </div>
       {nuevo && (
         <form onSubmit={crear} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
           <CamposProducto f={f} onChange={setF} incluirStockInicial />
           {error && <p className="error small">{error}</p>}
-          <button className="primary" style={{ marginTop: 10 }}>Guardar producto</button>
+          <button className="primary" style={{ marginTop: 10 }}>{t("pos.saveProduct")}</button>
         </form>
       )}
       {productos.length === 0 ? (
-        <p className="muted small" style={{ marginTop: 10 }}>Sin productos todavía.</p>
+        <p className="muted small" style={{ marginTop: 10 }}>{t("pos.noProducts")}</p>
       ) : (
         productos.map((p) => {
           const bajo = num(p.stock) <= num(p.stockMinimo);
@@ -268,8 +274,8 @@ function Productos({ negocio }: { negocio: Negocio }) {
                 <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} />
                 {error && <p className="error small">{error}</p>}
                 <div className="row" style={{ marginTop: 10 }}>
-                  <button className="primary">Guardar cambios</button>
-                  <button type="button" className="ghost" onClick={() => setEditandoId(null)}>Cancelar</button>
+                  <button className="primary">{t("pos.saveChanges")}</button>
+                  <button type="button" className="ghost" onClick={() => setEditandoId(null)}>{t("common.cancel")}</button>
                 </div>
               </form>
             );
@@ -278,12 +284,12 @@ function Productos({ negocio }: { negocio: Negocio }) {
             <div className="list-item" key={p.id}>
               <div>
                 <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br />
-                <span className={`badge ${bajo ? "err" : "ok"}`}>Stock: {num(p.stock)} {p.unidad}</span> <span className="muted small">· {money(p.precioVenta)}</span>
+                <span className={`badge ${bajo ? "err" : "ok"}`}>{t("pos.stock")}: {num(p.stock)} {p.unidad}</span> <span className="muted small">· {money(p.precioVenta)}</span>
               </div>
               <div className="row">
-                <button className="ghost small" onClick={() => empezarEdicion(p)}>✎ Editar</button>
-                <button className="ghost small" onClick={() => ajustar(p, "entrada")}>+ Entrada</button>
-                <button className="ghost small" onClick={() => ajustar(p, "salida")}>− Salida</button>
+                <button className="ghost small" onClick={() => empezarEdicion(p)}>{t("pos.edit")}</button>
+                <button className="ghost small" onClick={() => ajustar(p, "entrada")}>{t("pos.stockIn")}</button>
+                <button className="ghost small" onClick={() => ajustar(p, "salida")}>{t("pos.stockOut")}</button>
               </div>
             </div>
           );
@@ -295,6 +301,7 @@ function Productos({ negocio }: { negocio: Negocio }) {
 
 // ---------- CAJA ----------
 function Caja({ negocio }: { negocio: Negocio }) {
+  const { t } = useT();
   const [sesion, setSesion] = useState<Sesion | null>(null);
   const [ventas, setVentas] = useState<Venta[]>([]);
   const [resumen, setResumen] = useState<{ conteo: number; total: number; porMetodo: Record<string, number> } | null>(null);
@@ -308,41 +315,41 @@ function Caja({ negocio }: { negocio: Negocio }) {
   }
   useEffect(cargar, [negocio.id]);
 
-  async function abrir() { await api.post("/pos/caja/abrir", { negocioId: negocio.id, montoInicial: monto || 0 }); setMonto(""); setMsg("Caja abierta."); cargar(); }
+  async function abrir() { await api.post("/pos/caja/abrir", { negocioId: negocio.id, montoInicial: monto || 0 }); setMonto(""); setMsg(t("pos.cashOpened")); cargar(); }
   async function cerrar() {
     const r = await api.post<{ esperado: number; descuadre: number }>("/pos/caja/cerrar", { negocioId: negocio.id, montoFinal: monto || 0 });
-    setMsg(`Caja cerrada. Esperado: ${money(r.esperado)} · Descuadre: ${money(r.descuadre)}`); setMonto(""); cargar();
+    setMsg(`${t("pos.cashClosed")} ${t("pos.expected")}: ${money(r.esperado)} · ${t("pos.discrepancy")}: ${money(r.descuadre)}`); setMonto(""); cargar();
   }
 
   return (
     <div>
       {resumen && (
         <div className="card" style={{ background: "var(--surface-2)" }}>
-          <div className="row spread"><strong>Ventas de hoy</strong><span className="grad-text" style={{ fontWeight: 800 }}>{money(resumen.total)}</span></div>
-          <span className="muted small">{resumen.conteo} ventas · {Object.entries(resumen.porMetodo).map(([m, t]) => `${m}: ${money(t)}`).join(" · ") || "—"}</span>
+          <div className="row spread"><strong>{t("pos.salesToday")}</strong><span className="grad-text" style={{ fontWeight: 800 }}>{money(resumen.total)}</span></div>
+          <span className="muted small">{resumen.conteo} {t("pos.sales")} · {Object.entries(resumen.porMetodo).map(([m, t2]) => `${m}: ${money(t2)}`).join(" · ") || "—"}</span>
         </div>
       )}
       <div className="card" style={{ marginTop: 10 }}>
         {sesion ? (
           <>
-            <p className="small">🟢 Caja <strong>abierta</strong> desde {new Date(sesion.abiertaEn).toLocaleString()} · inicial {money(sesion.montoInicial)}</p>
-            <label>Monto final contado (cierre)</label>
+            <p className="small">🟢 {t("pos.cashOpenSince")} <strong>{t("pos.open")}</strong> {t("pos.since")} {new Date(sesion.abiertaEn).toLocaleString()} · {t("pos.initial")} {money(sesion.montoInicial)}</p>
+            <label>{t("pos.finalAmountCount")}</label>
             <input type="number" step="0.01" min="0" value={monto} onChange={(e) => setMonto(e.target.value)} />
-            <button className="primary" style={{ marginTop: 10 }} onClick={cerrar}>Cerrar caja</button>
+            <button className="primary" style={{ marginTop: 10 }} onClick={cerrar}>{t("pos.closeCash")}</button>
           </>
         ) : (
           <>
-            <p className="small">🔴 No hay caja abierta.</p>
-            <label>Monto inicial (fondo)</label>
+            <p className="small">🔴 {t("pos.noOpenCash")}</p>
+            <label>{t("pos.initialAmount")}</label>
             <input type="number" step="0.01" min="0" value={monto} onChange={(e) => setMonto(e.target.value)} />
-            <button className="primary" style={{ marginTop: 10 }} onClick={abrir}>Abrir caja</button>
+            <button className="primary" style={{ marginTop: 10 }} onClick={abrir}>{t("pos.openCash")}</button>
           </>
         )}
         {msg && <p className="success small" style={{ marginTop: 8 }}>{msg}</p>}
       </div>
       {ventas.length > 0 && (
         <div className="card" style={{ marginTop: 10 }}>
-          <strong className="small">Últimas ventas</strong>
+          <strong className="small">{t("pos.recentSales")}</strong>
           {ventas.slice(0, 10).map((v) => (
             <div className="list-item" key={v.id}><span className="muted small">{new Date(v.createdAt).toLocaleTimeString()} · {v.metodoPago}</span><strong>{money(v.total)}</strong></div>
           ))}

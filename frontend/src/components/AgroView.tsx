@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio, type RolNegocio } from "../api";
 import { Stat } from "./Ui";
 import { hoyLocal, formatFechaLocal } from "../dateUtils";
+import { useT, type TKey } from "../i18n";
 
 // Módulo AGRO (granja avícola): lotes/camadas con mortalidad, alimento, conversión (FCR)
 // y costeo real (alimento, sanidad, mano de obra…) para saber el margen de cada venta.
@@ -18,8 +19,17 @@ const hoy = hoyLocal;
 const fecha = formatFechaLocal;
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 
+// El backend devuelve la etiqueta ya en español (categoria/label): la ignoramos y
+// traducimos localmente a partir del código estable (tipoCosto/value), que no cambia.
+const TIPO_COSTO_KEY: Record<string, TKey> = {
+  livestock: "agro.tipoLivestock", feed: "agro.tipoFeed", medicine: "agro.tipoMedicine",
+  supplies: "agro.tipoSupplies", labor: "agro.tipoLabor", utilities: "agro.tipoUtilities",
+  transport: "agro.tipoTransport", other: "agro.tipoOther",
+};
+
 export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNegocio }) {
   void miRol; // el acceso al módulo ya se filtra en AdminView; acá todo el que entra ve todo el módulo.
+  const { t } = useT();
   const [lotes, setLotes] = useState<LoteResumen[]>([]);
   const [nuevo, setNuevo] = useState(false);
   const [abierto, setAbierto] = useState<string | null>(null);
@@ -35,72 +45,72 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
       await api.post("/agro/lotes", { ...f, negocioId: negocio.id, costoInicial: f.costoInicial || undefined });
       setF({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "" });
       setNuevo(false); cargar();
-    } catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
+    } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
   return (
     <div className="card">
       <div className="row spread">
-        <h2>🥚 Producción avícola</h2>
-        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => setNuevo((v) => !v)}>{nuevo ? "Cerrar" : "+ Nuevo lote"}</button>
+        <h2>{t("agro.title")}</h2>
+        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => setNuevo((v) => !v)}>{nuevo ? t("common.cancel") : t("agro.newLot")}</button>
       </div>
       {nuevo && (
         <form onSubmit={crear} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-          <label>Nombre del lote/camada</label>
-          <input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} required placeholder="Ej: Galpón 3 — Agosto" />
+          <label>{t("agro.lotName")}</label>
+          <input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} required placeholder={t("agro.lotNamePh")} />
           <div className="grid grid-2">
-            <div><label>Especie</label>
+            <div><label>{t("agro.species")}</label>
               <select value={f.especie} onChange={(e) => setF({ ...f, especie: e.target.value })}>
-                <option value="broiler">Pollo de engorde (broiler)</option>
-                <option value="layer">Gallina ponedora (layer)</option>
+                <option value="broiler">{t("agro.broiler")}</option>
+                <option value="layer">{t("agro.layer")}</option>
               </select>
             </div>
-            <div><label>Producción</label>
+            <div><label>{t("agro.production")}</label>
               <select value={f.tipoProduccion} onChange={(e) => setF({ ...f, tipoProduccion: e.target.value })}>
-                <option value="meat">Carne</option>
-                <option value="eggs">Huevos</option>
+                <option value="meat">{t("agro.meat")}</option>
+                <option value="eggs">{t("agro.eggs")}</option>
               </select>
             </div>
-            <div><label>Cantidad inicial de aves</label><input type="number" min="1" value={f.cantidadInicial} onChange={(e) => setF({ ...f, cantidadInicial: e.target.value })} required /></div>
-            <div><label>Fecha de ingreso</label><input type="date" value={f.fechaInicio} onChange={(e) => setF({ ...f, fechaInicio: e.target.value })} required /></div>
-            <div><label>Costo de los pollitos BB (opcional)</label><input type="number" step="0.01" min="0" value={f.costoInicial} onChange={(e) => setF({ ...f, costoInicial: e.target.value })} placeholder="0.00" /></div>
+            <div><label>{t("agro.initialQty")}</label><input type="number" min="1" value={f.cantidadInicial} onChange={(e) => setF({ ...f, cantidadInicial: e.target.value })} required /></div>
+            <div><label>{t("agro.entryDate")}</label><input type="date" value={f.fechaInicio} onChange={(e) => setF({ ...f, fechaInicio: e.target.value })} required /></div>
+            <div><label>{t("agro.chickCost")}</label><input type="number" step="0.01" min="0" value={f.costoInicial} onChange={(e) => setF({ ...f, costoInicial: e.target.value })} placeholder="0.00" /></div>
           </div>
           {error && <p className="error small">{error}</p>}
-          <button className="primary" style={{ marginTop: 10 }}>Crear lote</button>
+          <button className="primary" style={{ marginTop: 10 }}>{t("agro.createLot")}</button>
         </form>
       )}
 
       {lotes.length === 0 ? (
-        <p className="muted small" style={{ marginTop: 10 }}>Aún no hay lotes.</p>
+        <p className="muted small" style={{ marginTop: 10 }}>{t("agro.noLots")}</p>
       ) : (
         lotes.map((l) => (
           <div className="list-item" key={l.id} style={{ flexDirection: "column", alignItems: "stretch", gap: 6 }}>
             <div className="row spread">
               <div>
                 <h3 style={{ margin: 0 }}>{l.nombre}</h3>
-                <span className="muted small">{l.especie === "broiler" ? "Engorde" : "Ponedora"} · {l.tipoProduccion === "meat" ? "carne" : "huevos"} · {l.edadDias} días</span>
+                <span className="muted small">{l.especie === "broiler" ? t("agro.raising") : t("agro.laying")} · {l.tipoProduccion === "meat" ? t("agro.meat").toLowerCase() : t("agro.eggs").toLowerCase()} · {l.edadDias} {t("agro.days")}</span>
               </div>
               <span className={`badge ${l.estado === "cerrado" ? "" : "ok"}`}>{l.estado}</span>
             </div>
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              <span className="badge ok">Vivas: {l.avesVivas}/{l.cantidadInicial}</span>
-              <span className={`badge ${l.mortalidadPct > 5 ? "err" : "warn"}`}>Mortalidad: {l.mortalidadPct}%</span>
-              <span className="badge">Alimento: {l.alimentoTotalKg} kg</span>
-              {l.tipoProduccion === "eggs" && <span className="badge">Huevos: {l.produccionTotal}</span>}
+              <span className="badge ok">{t("agro.alive")}: {l.avesVivas}/{l.cantidadInicial}</span>
+              <span className={`badge ${l.mortalidadPct > 5 ? "err" : "warn"}`}>{t("agro.mortality")}: {l.mortalidadPct}%</span>
+              <span className="badge">{t("agro.feed")}: {l.alimentoTotalKg} kg</span>
+              {l.tipoProduccion === "eggs" && <span className="badge">{t("agro.eggsLabel")}: {l.produccionTotal}</span>}
               {l.fcr != null && <span className="badge">FCR: {l.fcr}</span>}
             </div>
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
-              <span className="badge">Costo total: {money(l.costoTotal)}</span>
-              {l.costoPorKg != null && <span className="badge">Costo/kg: {money(l.costoPorKg)}</span>}
-              <span className="badge">Costo/ave: {money(l.costoPorAve)}</span>
-              <span className="badge ok">Ingreso: {money(l.ingresoTotal)}</span>
+              <span className="badge">{t("agro.totalCost")}: {money(l.costoTotal)}</span>
+              {l.costoPorKg != null && <span className="badge">{t("agro.costPerKg")}: {money(l.costoPorKg)}</span>}
+              <span className="badge">{t("agro.costPerBird")}: {money(l.costoPorAve)}</span>
+              <span className="badge ok">{t("agro.income")}: {money(l.ingresoTotal)}</span>
               {l.margenPct != null && (
-                <span className={`badge ${l.margen >= 0 ? "ok" : "err"}`}>Margen: {money(l.margen)} ({l.margenPct}%)</span>
+                <span className={`badge ${l.margen >= 0 ? "ok" : "err"}`}>{t("agro.margin")}: {money(l.margen)} ({l.margenPct}%)</span>
               )}
             </div>
             <div className="row spread">
               <span className="muted small" />
-              <button className="ghost small" onClick={() => setAbierto(abierto === l.id ? null : l.id)}>{abierto === l.id ? "Ocultar" : "Ver detalle, costos y registro diario"}</button>
+              <button className="ghost small" onClick={() => setAbierto(abierto === l.id ? null : l.id)}>{abierto === l.id ? t("agro.hide") : t("agro.viewDetail")}</button>
             </div>
             {abierto === l.id && <DetalleLote loteId={l.id} negocioId={negocio.id} onCambio={cargar} />}
           </div>
@@ -111,6 +121,7 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
 }
 
 function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioId: string; onCambio: () => void }) {
+  const { t } = useT();
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [costos, setCostos] = useState<Costo[]>([]);
   const [productosLote, setProductosLote] = useState<ProductoLote[]>([]);
@@ -143,7 +154,7 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
   async function guardarRegistro(e: React.FormEvent) {
     e.preventDefault(); setMsg("");
     await api.post(`/agro/lotes/${loteId}/registros`, r);
-    setMsg("Registro guardado.");
+    setMsg(t("agro.logSaved"));
     cargar(); onCambio();
   }
 
@@ -153,7 +164,7 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
       await api.post(`/agro/lotes/${loteId}/costos`, c);
       setC({ tipoCosto: c.tipoCosto, monto: "", fecha: hoy(), descripcion: "" });
       cargar(); onCambio();
-    } catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
+    } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
   async function borrarCosto(id: string) {
@@ -173,35 +184,36 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
 
   const vinculadosIds = new Set(productosLote.map((p) => p.id));
   const disponiblesParaVincular = productosNegocio.filter((p) => !vinculadosIds.has(p.id));
+  const tipoLabel = (value: string) => (TIPO_COSTO_KEY[value] ? t(TIPO_COSTO_KEY[value]) : value);
 
   return (
     <div className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
       {metricas && (
         <div className="grid grid-2" style={{ marginBottom: 12 }}>
-          <Stat label="Costo total" value={money(metricas.costoTotal)} icon="💸" />
-          <Stat label="Ingreso por ventas" value={money(metricas.ingresoTotal)} icon="💰" variant="green" />
-          <Stat label="Margen" value={`${money(metricas.margen)}${metricas.margenPct != null ? ` (${metricas.margenPct}%)` : ""}`} icon={metricas.margen >= 0 ? "📈" : "📉"} variant={metricas.margen >= 0 ? "green" : "accent"} />
-          {metricas.costoPorKg != null && <Stat label="Costo por kg" value={money(metricas.costoPorKg)} icon="⚖️" />}
+          <Stat label={t("agro.totalCost")} value={money(metricas.costoTotal)} icon="💸" />
+          <Stat label={t("agro.incomeFromSales")} value={money(metricas.ingresoTotal)} icon="💰" variant="green" />
+          <Stat label={t("agro.margin")} value={`${money(metricas.margen)}${metricas.margenPct != null ? ` (${metricas.margenPct}%)` : ""}`} icon={metricas.margen >= 0 ? "📈" : "📉"} variant={metricas.margen >= 0 ? "green" : "accent"} />
+          {metricas.costoPorKg != null && <Stat label={t("agro.costPerKgStat")} value={money(metricas.costoPorKg)} icon="⚖️" />}
         </div>
       )}
 
       <div className="tabs" style={{ marginBottom: 10 }}>
-        <button className={`tab ${tab === "diario" ? "active" : ""}`} onClick={() => setTab("diario")}>Registro diario</button>
-        <button className={`tab ${tab === "costos" ? "active" : ""}`} onClick={() => setTab("costos")}>Costos</button>
-        <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>Productos vinculados</button>
+        <button className={`tab ${tab === "diario" ? "active" : ""}`} onClick={() => setTab("diario")}>{t("agro.tabDaily")}</button>
+        <button className={`tab ${tab === "costos" ? "active" : ""}`} onClick={() => setTab("costos")}>{t("agro.tabCosts")}</button>
+        <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>{t("agro.tabProducts")}</button>
       </div>
 
       {tab === "diario" && (
         <>
           <form onSubmit={guardarRegistro}>
             <div className="grid grid-2">
-              <div><label>Fecha</label><input type="date" value={r.fecha} onChange={(e) => setR({ ...r, fecha: e.target.value })} required /></div>
-              <div><label>Mortalidad (aves)</label><input type="number" min="0" value={r.mortalidad} onChange={(e) => setR({ ...r, mortalidad: e.target.value })} /></div>
-              <div><label>Alimento (kg)</label><input type="number" step="0.001" min="0" value={r.alimentoKg} onChange={(e) => setR({ ...r, alimentoKg: e.target.value })} /></div>
-              <div><label>Peso promedio (g)</label><input type="number" step="0.1" min="0" value={r.pesoPromedioG} onChange={(e) => setR({ ...r, pesoPromedioG: e.target.value })} /></div>
-              <div><label>Producción (huevos)</label><input type="number" min="0" value={r.produccion} onChange={(e) => setR({ ...r, produccion: e.target.value })} /></div>
+              <div><label>{t("agro.date")}</label><input type="date" value={r.fecha} onChange={(e) => setR({ ...r, fecha: e.target.value })} required /></div>
+              <div><label>{t("agro.mortalityBirds")}</label><input type="number" min="0" value={r.mortalidad} onChange={(e) => setR({ ...r, mortalidad: e.target.value })} /></div>
+              <div><label>{t("agro.feedKg")}</label><input type="number" step="0.001" min="0" value={r.alimentoKg} onChange={(e) => setR({ ...r, alimentoKg: e.target.value })} /></div>
+              <div><label>{t("agro.avgWeightG")}</label><input type="number" step="0.1" min="0" value={r.pesoPromedioG} onChange={(e) => setR({ ...r, pesoPromedioG: e.target.value })} /></div>
+              <div><label>{t("agro.productionEggs")}</label><input type="number" min="0" value={r.produccion} onChange={(e) => setR({ ...r, produccion: e.target.value })} /></div>
             </div>
-            <button className="primary" style={{ marginTop: 10 }}>Guardar registro del día</button>
+            <button className="primary" style={{ marginTop: 10 }}>{t("agro.saveDailyLog")}</button>
             {msg && <span className="success small" style={{ marginLeft: 10 }}>{msg}</span>}
           </form>
 
@@ -209,9 +221,9 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
             <div style={{ overflowX: "auto", marginTop: 12 }}>
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead><tr style={{ textAlign: "left", color: "var(--faint)" }}>
-                  <th style={{ padding: "4px 6px" }}>Fecha</th><th style={{ padding: "4px 6px", textAlign: "right" }}>Mort.</th>
-                  <th style={{ padding: "4px 6px", textAlign: "right" }}>Alim. kg</th><th style={{ padding: "4px 6px", textAlign: "right" }}>Peso g</th>
-                  <th style={{ padding: "4px 6px", textAlign: "right" }}>Prod.</th>
+                  <th style={{ padding: "4px 6px" }}>{t("agro.colDate")}</th><th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colMort")}</th>
+                  <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colFeed")}</th><th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colWeight")}</th>
+                  <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colProd")}</th>
                 </tr></thead>
                 <tbody>
                   {registros.map((x) => (
@@ -232,27 +244,27 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
 
       {tab === "costos" && (
         <>
-          <p className="muted small">Cada peso que gastas criando este lote (alimento, vacunas, mano de obra…) para saber el costo real y el margen cuando vendas.</p>
+          <p className="muted small">{t("agro.costsIntro")}</p>
           <form onSubmit={agregarCosto} className="grid grid-2">
-            <div><label>Tipo de costo</label>
+            <div><label>{t("agro.costType")}</label>
               <select value={c.tipoCosto} onChange={(e) => setC({ ...c, tipoCosto: e.target.value })}>
-                {tiposCosto.map((tc) => <option key={tc.value} value={tc.value}>{tc.label}</option>)}
+                {tiposCosto.map((tc) => <option key={tc.value} value={tc.value}>{tipoLabel(tc.value)}</option>)}
               </select>
             </div>
-            <div><label>Monto</label><input type="number" step="0.01" min="0.01" value={c.monto} onChange={(e) => setC({ ...c, monto: e.target.value })} required /></div>
-            <div><label>Fecha</label><input type="date" value={c.fecha} onChange={(e) => setC({ ...c, fecha: e.target.value })} required /></div>
-            <div><label>Descripción (opcional)</label><input value={c.descripcion} onChange={(e) => setC({ ...c, descripcion: e.target.value })} placeholder="Ej: 2 sacos de iniciador" /></div>
+            <div><label>{t("agro.amount")}</label><input type="number" step="0.01" min="0.01" value={c.monto} onChange={(e) => setC({ ...c, monto: e.target.value })} required /></div>
+            <div><label>{t("agro.date")}</label><input type="date" value={c.fecha} onChange={(e) => setC({ ...c, fecha: e.target.value })} required /></div>
+            <div><label>{t("agro.descriptionOpt")}</label><input value={c.descripcion} onChange={(e) => setC({ ...c, descripcion: e.target.value })} placeholder={t("agro.descPh")} /></div>
             {error && <p className="error small" style={{ gridColumn: "1 / -1" }}>{error}</p>}
-            <button className="primary" style={{ gridColumn: "1 / -1", marginTop: 4 }}>+ Agregar costo</button>
+            <button className="primary" style={{ gridColumn: "1 / -1", marginTop: 4 }}>{t("agro.addCost")}</button>
           </form>
 
           {costos.length === 0 ? (
-            <p className="muted small" style={{ marginTop: 10 }}>Sin costos registrados todavía.</p>
+            <p className="muted small" style={{ marginTop: 10 }}>{t("agro.noCosts")}</p>
           ) : (
             <div style={{ marginTop: 12 }}>
               {costos.map((g) => (
                 <div className="list-item" key={g.id}>
-                  <div><strong>{g.categoria ?? "Costo"}</strong> {g.descripcion && <span className="muted small">· {g.descripcion}</span>}<br /><span className="muted small">{fecha(g.fecha)}</span></div>
+                  <div><strong>{g.tipoCosto ? tipoLabel(g.tipoCosto) : (g.categoria ?? t("agro.cost"))}</strong> {g.descripcion && <span className="muted small">· {g.descripcion}</span>}<br /><span className="muted small">{fecha(g.fecha)}</span></div>
                   <div className="row"><strong>{money(g.monto)}</strong><button className="ghost small" onClick={() => borrarCosto(g.id)}>✕</button></div>
                 </div>
               ))}
@@ -263,21 +275,21 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
 
       {tab === "productos" && (
         <>
-          <p className="muted small">Vincula los productos que salen de este lote (ej. "Pollo entero", "Menudencia"): sus ventas se suman como ingreso real de este lote.</p>
+          <p className="muted small">{t("agro.linkIntro")}</p>
           {productosLote.length === 0 ? (
-            <p className="muted small">Ningún producto vinculado todavía.</p>
+            <p className="muted small">{t("agro.noneLinked")}</p>
           ) : (
             productosLote.map((p) => (
               <div className="list-item" key={p.id}>
-                <div><strong>{p.nombre}</strong> <span className="muted small">· {money(p.precioVenta)} · stock {Number(p.stock)}</span></div>
-                <button className="ghost small" onClick={() => desvincular(p.id)}>Desvincular</button>
+                <div><strong>{p.nombre}</strong> <span className="muted small">· {money(p.precioVenta)} · {t("agro.stock")} {Number(p.stock)}</span></div>
+                <button className="ghost small" onClick={() => desvincular(p.id)}>{t("agro.unlink")}</button>
               </div>
             ))
           )}
           {disponiblesParaVincular.length > 0 && (
             <div className="row" style={{ marginTop: 10 }}>
               <select defaultValue="" onChange={(e) => { vincular(e.target.value); e.target.value = ""; }}>
-                <option value="" disabled>Vincular producto existente…</option>
+                <option value="" disabled>{t("agro.linkExisting")}</option>
                 {disponiblesParaVincular.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>

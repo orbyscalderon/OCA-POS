@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, puedeNegocio, type Negocio, type RolNegocio } from "../api";
+import { api, ApiError, type Negocio } from "../api";
 import { useT } from "../i18n";
 
 // Módulo POS + Inventario + Caja (rubros de retail/alimentos: supermercado, vape, ferretería, farmacia…).
@@ -7,6 +7,11 @@ interface Producto {
   id: string; nombre: string; sku: string | null; categoria: string | null; unidad: string;
   precioVenta: string | number; impuestoPct: string | number; costo: string | number | null;
   stock: string | number; stockMinimo: string | number; activo: boolean;
+  // Líquidos de vapeo (opcionales).
+  volumenMl: string | number | null; nicotinaMg: string | number | null;
+  // Si este producto (p. ej. "Recarga") descuenta stock de OTRO producto (el pote) en vez de
+  // llevar stock propio.
+  productoFuenteId: string | null; rendimientoPorVenta: string | number | null;
 }
 interface Sesion { id: string; montoInicial: string | number; abiertaEn: string; estado: string }
 interface Venta { id: string; total: string | number; metodoPago: string; createdAt: string }
@@ -14,32 +19,11 @@ interface Venta { id: string; total: string | number; metodoPago: string; create
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
 
-export function ComercioView({ negocio, miRol, credit = false }: { negocio: Negocio; miRol?: RolNegocio; credit?: boolean }) {
-  const { t } = useT();
-  const vePos = puedeNegocio(miRol, "pos");
-  const veInventario = puedeNegocio(miRol, "inventario");
-  const veCaja = puedeNegocio(miRol, "caja");
-  const [tab, setTab] = useState<"vender" | "productos" | "caja">(vePos ? "vender" : veInventario ? "productos" : "caja");
-  return (
-    <div className="card">
-      <h2>{t("pos.title")}</h2>
-      <div className="tabs" style={{ marginBottom: 12 }}>
-        {vePos && <button className={`tab ${tab === "vender" ? "active" : ""}`} onClick={() => setTab("vender")}>{t("pos.tabSell")}</button>}
-        {veInventario && <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>{t("pos.tabProducts")}</button>}
-        {veCaja && <button className={`tab ${tab === "caja" ? "active" : ""}`} onClick={() => setTab("caja")}>{t("pos.tabCash")}</button>}
-      </div>
-      {tab === "vender" && vePos && <Vender negocio={negocio} credit={credit} />}
-      {tab === "productos" && veInventario && <Productos negocio={negocio} />}
-      {tab === "caja" && veCaja && <Caja negocio={negocio} />}
-    </div>
-  );
-}
-
 // ---------- VENDER (POS) ----------
 interface LineaCarrito { productoId?: string; nombre: string; cantidad: number; precioUnit: number; impuestoPct: number }
 interface ClienteLite { id: string; nombre: string; telefono: string | null; saldoFiado: string | number }
 
-function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
+export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
   const { t } = useT();
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<Producto[]>([]);
@@ -197,16 +181,31 @@ function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
 }
 
 // Campos editables de un producto (todo menos el stock, que se mueve por /stock).
-interface FormProducto { nombre: string; sku: string; categoria: string; precioVenta: string; impuestoPct: string; stock: string; unidad: string; stockMinimo: string }
-const formVacio: FormProducto = { nombre: "", sku: "", categoria: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0" };
+interface FormProducto {
+  nombre: string; sku: string; categoria: string; precioVenta: string; impuestoPct: string; stock: string; unidad: string; stockMinimo: string;
+  volumenMl: string; nicotinaMg: string; productoFuenteId: string; rendimientoPorVenta: string;
+}
+const formVacio: FormProducto = {
+  nombre: "", sku: "", categoria: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0",
+  volumenMl: "", nicotinaMg: "", productoFuenteId: "", rendimientoPorVenta: "",
+};
 function formDeProducto(p: Producto): FormProducto {
-  return { nombre: p.nombre, sku: p.sku ?? "", categoria: p.categoria ?? "", precioVenta: String(num(p.precioVenta)), impuestoPct: String(num(p.impuestoPct)), stock: String(num(p.stock)), unidad: p.unidad, stockMinimo: String(num(p.stockMinimo)) };
+  return {
+    nombre: p.nombre, sku: p.sku ?? "", categoria: p.categoria ?? "", precioVenta: String(num(p.precioVenta)), impuestoPct: String(num(p.impuestoPct)), stock: String(num(p.stock)), unidad: p.unidad, stockMinimo: String(num(p.stockMinimo)),
+    volumenMl: p.volumenMl != null ? String(num(p.volumenMl)) : "", nicotinaMg: p.nicotinaMg != null ? String(num(p.nicotinaMg)) : "",
+    productoFuenteId: p.productoFuenteId ?? "", rendimientoPorVenta: p.rendimientoPorVenta != null ? String(num(p.rendimientoPorVenta)) : "",
+  };
 }
 
-// Campos comunes del formulario (nombre/sku/categoría/precio/impuesto/stock mínimo).
+// Campos comunes del formulario (nombre/sku/categoría/precio/impuesto/stock mínimo/ml/mg/recarga).
 // `incluirStockInicial` solo aplica al crear: al editar el stock se mueve con +Entrada/−Salida.
-function CamposProducto({ f, onChange, incluirStockInicial }: { f: FormProducto; onChange: (f: FormProducto) => void; incluirStockInicial: boolean }) {
+// `otrosProductos` + `propioId`: para el selector "esto descuenta de" (recargas), excluyéndose
+// a sí mismo para no poder apuntar un producto a sí mismo como fuente.
+function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, propioId }: {
+  f: FormProducto; onChange: (f: FormProducto) => void; incluirStockInicial: boolean; otrosProductos: Producto[]; propioId?: string;
+}) {
   const { t } = useT();
+  const candidatosFuente = otrosProductos.filter((p) => p.id !== propioId && !p.productoFuenteId);
   return (
     <>
       <label>{t("pos.name")}</label>
@@ -220,13 +219,32 @@ function CamposProducto({ f, onChange, incluirStockInicial }: { f: FormProducto;
         <div><label>{t("pos.taxPct")}</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => onChange({ ...f, impuestoPct: e.target.value })} /></div>
         {incluirStockInicial && <div><label>{t("pos.initialStock")}</label><input type="number" step="0.001" value={f.stock} onChange={(e) => onChange({ ...f, stock: e.target.value })} /></div>}
         <div><label>{t("pos.minStock")}</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
+        <div><label>{t("pos.volumeMl")}</label><input type="number" step="0.01" min="0" value={f.volumenMl} onChange={(e) => onChange({ ...f, volumenMl: e.target.value })} placeholder="30" /></div>
+        <div><label>{t("pos.nicotineMg")}</label><input type="number" step="0.01" min="0" value={f.nicotinaMg} onChange={(e) => onChange({ ...f, nicotinaMg: e.target.value })} placeholder="6" /></div>
       </div>
+
+      {candidatosFuente.length > 0 && (
+        <>
+          <label style={{ marginTop: 8 }}>{t("pos.sourceProduct")}</label>
+          <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.sourceProductHelp")}</p>
+          <select value={f.productoFuenteId} onChange={(e) => onChange({ ...f, productoFuenteId: e.target.value })}>
+            <option value="">{t("pos.sourceProductNone")}</option>
+            {candidatosFuente.map((p) => <option key={p.id} value={p.id}>{p.nombre}{p.unidad ? ` (${p.unidad})` : ""}</option>)}
+          </select>
+          {f.productoFuenteId && (
+            <div style={{ marginTop: 6 }}>
+              <label>{t("pos.yieldPerSale")}</label>
+              <input type="number" step="0.001" min="0" value={f.rendimientoPorVenta} onChange={(e) => onChange({ ...f, rendimientoPorVenta: e.target.value })} placeholder="3" />
+            </div>
+          )}
+        </>
+      )}
     </>
   );
 }
 
 // ---------- PRODUCTOS (Inventario) ----------
-function Productos({ negocio }: { negocio: Negocio }) {
+export function Productos({ negocio }: { negocio: Negocio }) {
   const { t } = useT();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [nuevo, setNuevo] = useState(false);
@@ -238,9 +256,28 @@ function Productos({ negocio }: { negocio: Negocio }) {
   function cargar() { api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}`).then((r) => setProductos(r.productos)).catch(() => {}); }
   useEffect(cargar, [negocio.id]);
 
+  // Los campos opcionales llegan como string vacío desde el form (input vacío) — hay que
+  // mandarlos como null, si no z.coerce.number() del backend falla al intentar convertir "".
+  function paraEnviar(datos: FormProducto) {
+    return {
+      ...datos,
+      volumenMl: datos.volumenMl === "" ? null : datos.volumenMl,
+      nicotinaMg: datos.nicotinaMg === "" ? null : datos.nicotinaMg,
+      productoFuenteId: datos.productoFuenteId === "" ? null : datos.productoFuenteId,
+      rendimientoPorVenta: datos.rendimientoPorVenta === "" ? null : datos.rendimientoPorVenta,
+    };
+  }
+
+  function validarFuente(datos: FormProducto): string | null {
+    if (datos.productoFuenteId && !datos.rendimientoPorVenta) return t("pos.yieldRequired");
+    return null;
+  }
+
   async function crear(e: React.FormEvent) {
     e.preventDefault(); setError("");
-    try { await api.post("/inventario", { ...f, negocioId: negocio.id }); setF(formVacio); setNuevo(false); cargar(); }
+    const err0 = validarFuente(f);
+    if (err0) { setError(err0); return; }
+    try { await api.post("/inventario", { ...paraEnviar(f), negocioId: negocio.id }); setF(formVacio); setNuevo(false); cargar(); }
     catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
@@ -250,8 +287,10 @@ function Productos({ negocio }: { negocio: Negocio }) {
     e.preventDefault();
     if (!editandoId) return;
     setError("");
+    const err0 = validarFuente(fe);
+    if (err0) { setError(err0); return; }
     try {
-      const { stock: _stock, ...cambios } = fe; // el stock no se toca por acá
+      const { stock: _stock, ...cambios } = paraEnviar(fe); // el stock no se toca por acá
       await api.patch(`/inventario/${editandoId}`, cambios);
       setEditandoId(null); cargar();
     } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
@@ -273,7 +312,7 @@ function Productos({ negocio }: { negocio: Negocio }) {
       </div>
       {nuevo && (
         <form onSubmit={crear} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-          <CamposProducto f={f} onChange={setF} incluirStockInicial />
+          <CamposProducto f={f} onChange={setF} incluirStockInicial otrosProductos={productos} />
           {error && <p className="error small">{error}</p>}
           <button className="primary" style={{ marginTop: 10 }}>{t("pos.saveProduct")}</button>
         </form>
@@ -286,7 +325,7 @@ function Productos({ negocio }: { negocio: Negocio }) {
           if (editandoId === p.id) {
             return (
               <form key={p.id} onSubmit={guardarEdicion} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-                <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} />
+                <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} otrosProductos={productos} propioId={p.id} />
                 {error && <p className="error small">{error}</p>}
                 <div className="row" style={{ marginTop: 10 }}>
                   <button className="primary">{t("pos.saveChanges")}</button>
@@ -295,16 +334,23 @@ function Productos({ negocio }: { negocio: Negocio }) {
               </form>
             );
           }
+          const fuente = p.productoFuenteId ? productos.find((x) => x.id === p.productoFuenteId) : null;
+          const atributos = [p.volumenMl != null ? `${num(p.volumenMl)}ml` : null, p.nicotinaMg != null ? `${num(p.nicotinaMg)}mg` : null].filter(Boolean).join(" · ");
           return (
             <div className="list-item" key={p.id}>
               <div>
-                <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br />
-                <span className={`badge ${bajo ? "err" : "ok"}`}>{t("pos.stock")}: {num(p.stock)} {p.unidad}</span> <span className="muted small">· {money(p.precioVenta)}</span>
+                <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span>{atributos && <span className="muted small"> · {atributos}</span>}<br />
+                {fuente ? (
+                  <span className="badge">{t("pos.refillOf")} {fuente.nombre}</span>
+                ) : (
+                  <span className={`badge ${bajo ? "err" : "ok"}`}>{t("pos.stock")}: {num(p.stock)} {p.unidad}</span>
+                )}
+                <span className="muted small"> · {money(p.precioVenta)}</span>
               </div>
               <div className="row">
                 <button className="ghost small" onClick={() => empezarEdicion(p)}>{t("pos.edit")}</button>
-                <button className="ghost small" onClick={() => ajustar(p, "entrada")}>{t("pos.stockIn")}</button>
-                <button className="ghost small" onClick={() => ajustar(p, "salida")}>{t("pos.stockOut")}</button>
+                {!fuente && <button className="ghost small" onClick={() => ajustar(p, "entrada")}>{t("pos.stockIn")}</button>}
+                {!fuente && <button className="ghost small" onClick={() => ajustar(p, "salida")}>{t("pos.stockOut")}</button>}
               </div>
             </div>
           );
@@ -315,7 +361,7 @@ function Productos({ negocio }: { negocio: Negocio }) {
 }
 
 // ---------- CAJA ----------
-function Caja({ negocio }: { negocio: Negocio }) {
+export function Caja({ negocio }: { negocio: Negocio }) {
   const { t } = useT();
   const [sesion, setSesion] = useState<Sesion | null>(null);
   const [ventas, setVentas] = useState<Venta[]>([]);

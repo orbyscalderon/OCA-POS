@@ -130,8 +130,21 @@ posRouter.post(
       // Descontar stock y registrar movimiento por cada línea con producto.
       for (const l of d.lineas) {
         if (!l.productoId || !mapProd.has(l.productoId)) continue;
-        await tx.producto.update({ where: { id: l.productoId }, data: { stock: { decrement: l.cantidad } } });
-        await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "venta", cantidad: -Math.abs(l.cantidad), motivo: `Venta ${v.id.slice(-6)}` } });
+        const prod = mapProd.get(l.productoId)!;
+        if (prod.productoFuenteId && prod.rendimientoPorVenta) {
+          // Este producto (p. ej. "Recarga") no lleva stock propio: es un servicio que
+          // consume stock de OTRO producto (el pote de líquido). Se descuenta ahí, con el
+          // rendimiento configurado (ej. 3 ml por recarga vendida), para que el cálculo de
+          // lo que queda en el pote sea correcto.
+          const consumo = l.cantidad * Number(prod.rendimientoPorVenta);
+          await tx.producto.update({ where: { id: prod.productoFuenteId }, data: { stock: { decrement: consumo } } });
+          await tx.movimientoStock.create({
+            data: { productoId: prod.productoFuenteId, tipo: "venta", cantidad: -Math.abs(consumo), motivo: `Venta ${v.id.slice(-6)} (${prod.nombre})` },
+          });
+        } else {
+          await tx.producto.update({ where: { id: l.productoId }, data: { stock: { decrement: l.cantidad } } });
+          await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "venta", cantidad: -Math.abs(l.cantidad), motivo: `Venta ${v.id.slice(-6)}` } });
+        }
       }
       // Fiado: el total de la venta se suma al saldo del cliente (increment atómico).
       if (d.metodoPago === "fiado" && cliente) {

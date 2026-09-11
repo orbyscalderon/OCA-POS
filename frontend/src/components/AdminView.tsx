@@ -4,7 +4,7 @@ import { useT } from "../i18n";
 import { Stat } from "./Ui";
 import { MapaUbicacion } from "./MapaUbicacion";
 import { PrestamosView } from "./PrestamosView";
-import { ComercioView } from "./ComercioView";
+import { Vender, Productos, Caja } from "./ComercioView";
 import { AgroView } from "./AgroView";
 import { MesasView } from "./MesasView";
 import { ServiceOrdersView } from "./ServiceOrdersView";
@@ -276,13 +276,49 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
   // cada bloque es un destino del menú lateral en lugar de una tarjeta más en la lista.
   const secciones: { key: string; label: string; icon: string; content: React.ReactNode }[] = [];
 
-  if (esAdmin) {
+  // Ventas e inventario son operativos del día a día (los usa el cajero en el mostrador), así
+  // que quedan sueltos y accesibles según el rol — no van detrás del PIN de Contabilidad.
+  // Solo "pos" y "agro" tienen el permiso reforzado también en el backend (lib/acceso.ts), así
+  // que son los únicos módulos que el personal con rol puede abrir. El resto (préstamos, mesas,
+  // taller, clientes) siguen siendo del dueño únicamente en el backend — mostrarlos a personal
+  // daría una pantalla que solo falla al guardar, así que quedan reservados a "esDueno" hasta
+  // que se refuerce cada uno.
+  if (modulos.includes("pos") && puedeNegocio(miRol, "pos")) {
+    secciones.push({ key: "ventas", label: t("nav.sales"), icon: "🛒", content: <Vender negocio={negocio} credit={modulos.includes("credit")} /> });
+  }
+  if (modulos.includes("pos") && puedeNegocio(miRol, "inventario")) {
+    secciones.push({ key: "inventario", label: t("nav.inventory"), icon: "📦", content: <Productos negocio={negocio} /> });
+  }
+  if (modulos.includes("agro") && puedeNegocio(miRol, "agro")) {
+    secciones.push({ key: "agro", label: t("nav.agro"), icon: "🐔", content: <AgroView negocio={negocio} miRol={miRol} /> });
+  }
+  if (esDueno && modulos.includes("lending")) {
+    secciones.push({ key: "prestamos", label: t("nav.lending"), icon: "💵", content: <PrestamosView negocio={negocio} /> });
+  }
+  if (esDueno && modulos.includes("tables")) {
+    secciones.push({ key: "mesas", label: t("nav.tables"), icon: "🍽️", content: <MesasView negocio={negocio} /> });
+  }
+  if (esDueno && modulos.includes("service_orders")) {
+    secciones.push({ key: "ordenes", label: t("nav.orders"), icon: "🔧", content: <ServiceOrdersView negocio={negocio} /> });
+  }
+  if (esDueno && modulos.includes("customers")) {
+    secciones.push({ key: "clientes", label: t("nav.customers"), icon: "👤", content: <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} credit={modulos.includes("credit")} /> });
+  }
+  if (modulos.includes("storefront") && esAdmin) {
+    secciones.push({ key: "tienda", label: t("nav.store"), icon: "🌐", content: <TiendaLink slug={negocio.slug} /> });
+  }
+
+  // Contabilidad agrupa todo lo sensible (equipo/roles, caja, compras, gastos, impuestos,
+  // analítica) detrás de un PIN aparte del login — así un cajero con sesión iniciada no puede
+  // ver quién gana qué, cuánto hay en caja, ni los números del negocio sin que el dueño
+  // autorice esa pantalla puntual.
+  if (esDueno) {
     secciones.push({
-      key: "equipo",
-      label: t("nav.team"),
-      icon: "👥",
+      key: "contabilidad",
+      label: t("nav.accounting"),
+      icon: "🔒",
       content: (
-        <>
+        <ContabilidadPanel negocio={negocio}>
           <div className="card">
             <div className="row spread">
               <h2>{t("own.activeTeam")}</h2>
@@ -317,47 +353,8 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
           {/* El "equipo de profesionales" con agenda solo aplica a rubros con citas — un
               comercio minorista como una tienda de vapes no tiene profesionales que reservan. */}
           {modulos.includes("appointments") && <Invitacion negocioId={negocio.id} />}
-        </>
-      ),
-    });
-  }
 
-  // Solo "pos" y "agro" tienen el permiso reforzado también en el backend (lib/acceso.ts),
-  // así que son los únicos módulos que el personal con rol puede abrir. El resto (préstamos,
-  // mesas, taller, clientes) siguen siendo del dueño únicamente en el backend — mostrarlos a
-  // personal daría una pantalla que solo falla al guardar, así que quedan reservados a
-  // "esDueno" hasta que se refuerce cada uno.
-  if (modulos.includes("pos") && (puedeNegocio(miRol, "pos") || puedeNegocio(miRol, "inventario"))) {
-    secciones.push({ key: "comercio", label: t("nav.commerce"), icon: "🛒", content: <ComercioView negocio={negocio} miRol={miRol} credit={modulos.includes("credit")} /> });
-  }
-  if (modulos.includes("agro") && puedeNegocio(miRol, "agro")) {
-    secciones.push({ key: "agro", label: t("nav.agro"), icon: "🐔", content: <AgroView negocio={negocio} miRol={miRol} /> });
-  }
-  if (esDueno && modulos.includes("lending")) {
-    secciones.push({ key: "prestamos", label: t("nav.lending"), icon: "💵", content: <PrestamosView negocio={negocio} /> });
-  }
-  if (esDueno && modulos.includes("tables")) {
-    secciones.push({ key: "mesas", label: t("nav.tables"), icon: "🍽️", content: <MesasView negocio={negocio} /> });
-  }
-  if (esDueno && modulos.includes("service_orders")) {
-    secciones.push({ key: "ordenes", label: t("nav.orders"), icon: "🔧", content: <ServiceOrdersView negocio={negocio} /> });
-  }
-  if (esDueno && modulos.includes("customers")) {
-    secciones.push({ key: "clientes", label: t("nav.customers"), icon: "👤", content: <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} credit={modulos.includes("credit")} /> });
-  }
-  if (modulos.includes("storefront") && esAdmin) {
-    secciones.push({ key: "tienda", label: t("nav.store"), icon: "🌐", content: <TiendaLink slug={negocio.slug} /> });
-  }
-
-  // Contabilidad agrupa lo financiero (compras, gastos, impuestos, analítica) detrás de un PIN
-  // aparte del login — así un cajero con sesión iniciada no puede entrar a ver los números.
-  if (esDueno) {
-    secciones.push({
-      key: "contabilidad",
-      label: t("nav.accounting"),
-      icon: "🔒",
-      content: (
-        <ContabilidadPanel negocio={negocio}>
+          {modulos.includes("pos") && <Caja negocio={negocio} />}
           {modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
           {modulos.includes("expenses") && <GastosView negocio={negocio} />}
           {modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}

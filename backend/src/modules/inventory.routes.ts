@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { NotFound } from "../lib/errors.js";
+import { BadRequest, NotFound } from "../lib/errors.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAcceso } from "../lib/acceso.js";
@@ -21,7 +21,22 @@ const productoSchema = z.object({
   stockMinimo: z.coerce.number().min(0).default(0),
   // Agro: vincula el producto a un lote biológico para atribuirle el ingreso de sus ventas.
   loteId: z.string().min(1).nullable().optional(),
+  // Líquidos de vapeo: tamaño del pote y graduación de nicotina.
+  volumenMl: z.coerce.number().min(0).nullable().optional(),
+  nicotinaMg: z.coerce.number().min(0).nullable().optional(),
+  // Este producto (p. ej. "Recarga") descuenta stock de OTRO producto (el pote de líquido) en
+  // vez de llevar stock propio: productoFuenteId = qué pote, rendimientoPorVenta = cuánto se
+  // descuenta de ese pote por cada unidad vendida de este producto (p. ej. 3 ml por recarga).
+  productoFuenteId: z.string().min(1).nullable().optional(),
+  rendimientoPorVenta: z.coerce.number().min(0).nullable().optional(),
 });
+
+// El producto fuente (el pote del que descuenta una recarga) debe ser del MISMO negocio —
+// evita que un producto quede apuntando a stock de otro negocio.
+async function assertProductoFuenteValido(negocioId: string, productoFuenteId: string) {
+  const fuente = await prisma.producto.findUnique({ where: { id: productoFuenteId }, select: { negocioId: true } });
+  if (!fuente || fuente.negocioId !== negocioId) throw BadRequest("El producto fuente no pertenece a este negocio", "PRODUCTO_FUENTE_INVALIDO");
+}
 
 // Listar productos de un negocio.
 inventoryRouter.get(
@@ -49,11 +64,14 @@ inventoryRouter.post(
   asyncHandler(async (req, res) => {
     const d = productoSchema.parse(req.body);
     await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "inventario");
+    if (d.productoFuenteId) await assertProductoFuenteValido(d.negocioId, d.productoFuenteId);
     const producto = await prisma.producto.create({
       data: {
         negocioId: d.negocioId, nombre: d.nombre, sku: d.sku ?? null, categoria: d.categoria ?? null,
         unidad: d.unidad, precioVenta: d.precioVenta, impuestoPct: d.impuestoPct, costo: d.costo ?? null,
         stock: d.stock, stockMinimo: d.stockMinimo, loteId: d.loteId ?? null,
+        volumenMl: d.volumenMl ?? null, nicotinaMg: d.nicotinaMg ?? null,
+        productoFuenteId: d.productoFuenteId ?? null, rendimientoPorVenta: d.rendimientoPorVenta ?? null,
       },
     });
     // Movimiento inicial de stock si arranca con existencias.
@@ -73,6 +91,7 @@ inventoryRouter.patch(
     if (!p) throw NotFound("Producto no encontrado");
     await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario");
     const d = productoSchema.partial().omit({ negocioId: true, stock: true }).parse(req.body);
+    if (d.productoFuenteId) await assertProductoFuenteValido(p.negocioId, d.productoFuenteId);
     const producto = await prisma.producto.update({ where: { id: req.params.id }, data: d });
     res.json({ producto });
   }),

@@ -348,12 +348,27 @@ model Producto {
   loteId String?        @map("lote_id")
   lote   LoteBiologico? @relation(fields: [loteId], references: [id], onDelete: SetNull)
 
+  // Atributos de líquidos de vapeo (opcionales; solo aplican a ese tipo de producto).
+  volumenMl  Decimal? @map("volumen_ml") @db.Decimal(8, 2)
+  nicotinaMg Decimal? @map("nicotina_mg") @db.Decimal(6, 2)
+
+  // Si este producto es un SERVICIO que se sirve consumiendo stock de OTRO producto (p. ej.
+  // "Recarga" descuenta ml del pote "Líquido Mango 30ml"), en vez de llevar stock propio.
+  // rendimientoPorVenta = cuánto se descuenta del producto fuente por cada unidad vendida de
+  // ESTE producto (p. ej. 3 = 3ml por recarga vendida), para que el cálculo de lo que queda
+  // en el pote sea correcto sin tener que llevar dos inventarios separados a mano.
+  productoFuenteId    String?  @map("producto_fuente_id")
+  productoFuente      Producto?  @relation("ProductoFuente", fields: [productoFuenteId], references: [id], onDelete: SetNull)
+  rendimientoPorVenta Decimal? @map("rendimiento_por_venta") @db.Decimal(8, 3)
+  recargas            Producto[] @relation("ProductoFuente")
+
   movimientos MovimientoStock[]
   lineasVenta LineaVenta[]
   lineasCompra LineaCompra[]
 
   @@index([negocioId])
   @@index([loteId])
+  @@index([productoFuenteId])
   @@map("productos")
 }
 

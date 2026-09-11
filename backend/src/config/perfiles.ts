@@ -29,7 +29,7 @@ export const PERFILES: Perfil[] = [
     modulos: ["pos", "inventory", "credit", "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront", "employees"] },
   { slug: "vape_shop", nombre: "Tienda de Vapes", categoria: "retail", emoji: "💨", modoPrimario: "variant_inventory",
     descripcion: "Retail con muchos SKU por sabor y nicotina, control de edad y garantía.",
-    modulos: ["pos", "inventory", "credit", "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront", "service_orders", "employees"] },
+    modulos: ["pos", "inventory", "credit", "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront", "employees"] },
   { slug: "farmacia", nombre: "Farmacia / Botica", categoria: "salud", emoji: "💊", modoPrimario: "search_first",
     descripcion: "Catálogo grande buscado por nombre o principio activo, con trazabilidad de lote y vencimiento.",
     modulos: ["pos", "inventory", "credit", "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront", "employees"] },

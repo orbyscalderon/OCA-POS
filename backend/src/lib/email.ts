@@ -118,3 +118,18 @@ export function emailReset(nombre: string, url: string) {
     ),
   };
 }
+
+// Pedido de un cliente ya suscrito/licenciado: quiere una función a medida para su negocio.
+// Solo se manda al soporte interno — no hay flujo de cotización/aprobación automático todavía.
+export function emailSolicitudFuncion(negocioNombre: string, contactoNombre: string, contactoEmail: string, descripcion: string) {
+  return {
+    subject: `Solicitud de función a medida — ${negocioNombre}`,
+    html: layout(
+      "Nueva solicitud de función a medida",
+      `<p><b>Negocio:</b> ${negocioNombre}</p>
+       <p><b>Contacto:</b> ${contactoNombre} (${contactoEmail})</p>
+       <p><b>Pide:</b></p>
+       <p style="white-space:pre-wrap">${descripcion}</p>`,
+    ),
+  };
+}

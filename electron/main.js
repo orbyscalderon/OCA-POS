@@ -48,28 +48,58 @@ function getOrCreateJwtSecret() {
   return jwtSecret;
 }
 
+// Aplica las migraciones que todavía no corrieron en ESTA instalación. No alcanza con
+// preguntar "¿existe la tabla usuarios?" una sola vez al principio: una instalación ya
+// inicializada que recibe una actualización de la app con migraciones nuevas (como el PIN de
+// Contabilidad, agregado después del primer lanzamiento) se quedaba con el esquema viejo para
+// siempre, y cada endpoint que tocara la columna nueva fallaba con "column does not exist".
+// Se lleva registro de qué migración ya corrió en una tabla propia, igual que Prisma lo hace
+// con _prisma_migrations, así en cada arranque solo se aplican las que faltan.
+async function aplicarMigracionesPendientes() {
+  await db.exec(`
+    CREATE TABLE IF NOT EXISTS _oca_migraciones (
+      nombre TEXT PRIMARY KEY,
+      aplicada_en TIMESTAMP NOT NULL DEFAULT now()
+    );
+  `);
+  const aplicadas = new Set(
+    (await db.query("SELECT nombre FROM _oca_migraciones")).rows.map((r) => r.nombre),
+  );
+
+  const dirs = fs
+    .readdirSync(migrationsDir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort();
+
+  let aplicadasAhora = 0;
+  for (const dir of dirs) {
+    if (aplicadas.has(dir)) continue;
+    const sqlPath = path.join(migrationsDir, dir, "migration.sql");
+    if (!fs.existsSync(sqlPath)) continue;
+    try {
+      await db.exec(fs.readFileSync(sqlPath, "utf8"));
+    } catch (err) {
+      // Instalaciones que ya existían antes de que se agregara esta tabla de seguimiento
+      // (o una migración a medio aplicar por un cierre abrupto) pueden pisar algo que ya
+      // está — si el motor dice "ya existe", se toma como aplicada y se sigue, en vez de
+      // tirar abajo el arranque entero de la app.
+      if (!/already exists/i.test(String(err?.message))) throw err;
+    }
+    await db.query("INSERT INTO _oca_migraciones (nombre) VALUES ($1)", [dir]);
+    aplicadasAhora++;
+  }
+  if (aplicadasAhora > 0) {
+    console.log(`[oca-pos] Esquema al día: ${aplicadasAhora} migración(es) nueva(s) aplicada(s) (${dirs.length} en total).`);
+  }
+}
+
 async function startEmbeddedPostgres() {
   fs.mkdirSync(pgDataDir, { recursive: true });
   db = new PGlite(pgDataDir);
   await db.waitReady;
 
-  const check = await db.query("SELECT to_regclass('public.usuarios') as t");
-  const yaInicializado = check.rows[0]?.t !== null;
-
-  if (!yaInicializado) {
-    console.log("[oca-pos] Primera vez: aplicando el esquema de la base de datos...");
-    const dirs = fs
-      .readdirSync(migrationsDir, { withFileTypes: true })
-      .filter((d) => d.isDirectory())
-      .map((d) => d.name)
-      .sort();
-    for (const dir of dirs) {
-      const sqlPath = path.join(migrationsDir, dir, "migration.sql");
-      if (!fs.existsSync(sqlPath)) continue;
-      await db.exec(fs.readFileSync(sqlPath, "utf8"));
-    }
-    console.log(`[oca-pos] Esquema aplicado (${dirs.length} migraciones).`);
-  }
+  await aplicarMigracionesPendientes();
 
   socketServer = new PGLiteSocketServer({ db, port: PG_PORT, host: "127.0.0.1" });
   await socketServer.start();

@@ -3,6 +3,10 @@ import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
 import { useT } from "../i18n";
 
+// App de escritorio: sin backend de email real configurado, no tiene sentido pedirle al
+// dueño que "verifique su email" — es su propia instalación local, no una cuenta pública.
+const DESKTOP_MODE = ((import.meta.env.VITE_DESKTOP_MODE as string | undefined) ?? "").trim() === "true";
+
 // Barra de cuenta: aviso de verificación de email + acciones GDPR (exportar/borrar datos).
 export function AccountBar() {
   const { usuario, logout, refrescarUsuario } = useAuth();
@@ -41,7 +45,7 @@ export function AccountBar() {
 
   return (
     <div className="container" style={{ paddingTop: 12, paddingBottom: 0 }}>
-      {!verificado && (
+      {!verificado && !DESKTOP_MODE && (
         <div className="card" style={{ borderColor: "var(--amber)", marginBottom: 8 }}>
           <div className="row spread">
             <span className="small">{t("account.verifyWarn")}</span>

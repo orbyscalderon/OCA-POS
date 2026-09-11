@@ -12,6 +12,8 @@ import { calcularSplitFianza } from "../lib/split.js";
 import { limitePeluqueros, limiteNegocios } from "../lib/planes.js";
 import { SLUGS_PERFIL } from "../config/perfiles.js";
 import { requireAcceso, ROLES_ASIGNABLES } from "../lib/acceso.js";
+import { hashPassword, verifyPassword } from "../lib/auth.js";
+import { enviarEmail, emailSolicitudFuncion } from "../lib/email.js";
 
 export const negociosRouter = Router();
 
@@ -527,6 +529,52 @@ negociosRouter.get(
   }),
 );
 
+// Crea el usuario del empleado directo, sin invitación por link — pensado para la app de
+// escritorio: ahí no hay forma de que un link le llegue a nadie (el servidor solo es alcanzable
+// en esta misma PC), así que el dueño le da de alta la cuenta y la clave ahí mismo, en persona.
+const crearMiembroDirectoSchema = z.object({
+  nombre: z.string().min(2).max(100),
+  email: z.string().email().max(150),
+  telefono: z.string().min(6).max(20),
+  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
+  rol: z.enum(ROLES_ASIGNABLES),
+});
+
+negociosRouter.post(
+  "/:id/miembros/crear-directo",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const negocioId = req.params.id;
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "equipo");
+    const d = crearMiembroDirectoSchema.parse(req.body);
+
+    const existe = await prisma.usuario.findUnique({ where: { email: d.email } });
+    if (existe) throw BadRequest("Ese email ya está en uso", "EMAIL_EN_USO");
+
+    const { usuario, miembro } = await prisma.$transaction(async (tx) => {
+      const usuario = await tx.usuario.create({
+        data: {
+          nombre: d.nombre,
+          email: d.email,
+          telefono: d.telefono,
+          passwordHash: await hashPassword(d.password),
+          rol: "cliente",
+          // Cuenta creada en persona por el dueño: no hace falta el paso de verificar email.
+          emailVerificadoEn: new Date(),
+        },
+      });
+      const miembro = await tx.miembroNegocio.create({
+        data: { negocioId, usuarioId: usuario.id, rol: d.rol },
+      });
+      return { usuario, miembro };
+    });
+
+    res.status(201).json({
+      miembro: { ...miembro, usuario: { id: usuario.id, nombre: usuario.nombre, email: usuario.email, telefono: usuario.telefono } },
+    });
+  }),
+);
+
 const actualizarMiembroSchema = z.object({
   rol: z.enum(ROLES_ASIGNABLES).optional(),
   activo: z.boolean().optional(),
@@ -664,5 +712,81 @@ negociosRouter.get(
       totalReservas: empleados.reduce((a, e) => a + e.reservasPagadas, 0),
       totalNegocioUsd: Number(empleados.reduce((a, e) => a + e.fianzaNegocioUsd, 0).toFixed(2)),
     });
+  }),
+);
+
+// ---------- PIN del panel de Contabilidad ----------
+// Un gerente/contador puede tener el área "gastos" habilitada por su rol de equipo, pero el
+// panel de Contabilidad (gastos/impuestos/compras/analítica) pide además este PIN — así el
+// dueño decide, sesión por sesión, quién entra a ver los números, sin crear una cuenta aparte.
+const pinSchema = z.object({ pin: z.string().min(4).max(20) });
+
+negociosRouter.get(
+  "/:id/pin-contabilidad",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "gastos");
+    const negocio = await prisma.negocio.findUnique({
+      where: { id: req.params.id },
+      select: { pinContabilidadHash: true },
+    });
+    if (!negocio) throw NotFound("Negocio no encontrado");
+    res.json({ configurado: !!negocio.pinContabilidadHash });
+  }),
+);
+
+negociosRouter.post(
+  "/:id/pin-contabilidad",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    // Solo el dueño define/cambia el PIN (no un gerente al que se le delegó el área).
+    await assertDueno(req.params.id, req.user!.sub);
+    const { pin } = pinSchema.parse(req.body);
+    await prisma.negocio.update({
+      where: { id: req.params.id },
+      data: { pinContabilidadHash: await hashPassword(pin) },
+    });
+    res.json({ ok: true });
+  }),
+);
+
+// ---------- Solicitar una función a medida ----------
+// Un negocio que ya tiene un plan/licencia puede pedir algo puntual para SU sistema (no es un
+// catálogo con precio fijo — se cotiza por fuera). Solo manda un email a soporte por ahora.
+const solicitudFuncionSchema = z.object({ descripcion: z.string().min(10).max(2000) });
+
+negociosRouter.post(
+  "/:id/solicitar-funcion",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const negocio = await assertDueno(req.params.id, req.user!.sub);
+    const { descripcion } = solicitudFuncionSchema.parse(req.body);
+    const usuario = await prisma.usuario.findUnique({ where: { id: req.user!.sub } });
+    const { subject, html } = emailSolicitudFuncion(
+      negocio.nombreComercial,
+      usuario?.nombre ?? "—",
+      usuario?.email ?? "—",
+      descripcion,
+    );
+    await enviarEmail({ to: env.companySupportEmail, subject, html });
+    res.json({ ok: true });
+  }),
+);
+
+negociosRouter.post(
+  "/:id/pin-contabilidad/verificar",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "gastos");
+    const { pin } = pinSchema.parse(req.body);
+    const negocio = await prisma.negocio.findUnique({
+      where: { id: req.params.id },
+      select: { pinContabilidadHash: true },
+    });
+    if (!negocio) throw NotFound("Negocio no encontrado");
+    if (!negocio.pinContabilidadHash) throw Conflict("Todavía no configuraste un PIN de contabilidad", "PIN_NO_CONFIGURADO");
+    const ok = await verifyPassword(pin, negocio.pinContabilidadHash);
+    if (!ok) throw Forbidden("PIN incorrecto");
+    res.json({ ok: true });
   }),
 );

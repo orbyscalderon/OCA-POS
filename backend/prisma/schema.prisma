@@ -97,6 +97,10 @@ model Negocio {
   telefonoContacto  String            @map("telefono_contacto") @db.VarChar(20)
   logoUrl           String?           @map("logo_url") @db.VarChar(255)
   coverUrl          String?           @map("cover_url") @db.VarChar(255)
+  // PIN de acceso al panel de Contabilidad (gastos/impuestos/compras/analítica): separado del
+  // login normal, así un cajero con sesión iniciada no puede ver los reportes financieros sin
+  // que el dueño/gerente ingrese este PIN. Null = todavía no configurado (panel bloqueado).
+  pinContabilidadHash String?         @map("pin_contabilidad_hash") @db.VarChar(255)
   timezone          String            @default("Europe/Madrid") @db.VarChar(64)
   // Geolocalización para búsqueda por cercanía.
   lat               Float?

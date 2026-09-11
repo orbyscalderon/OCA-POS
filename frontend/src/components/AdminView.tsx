@@ -13,6 +13,10 @@ import { ClientesView } from "./ClientesView";
 import { ComprasView } from "./ComprasView";
 import { ImpuestosView } from "./ImpuestosView";
 
+// App de escritorio: el negocio ya vive dentro de una instalación con licencia propia, así que
+// no tiene sentido ofrecerle "pasarse" a un plan de suscripción en la nube desde acá adentro.
+const DESKTOP_MODE = ((import.meta.env.VITE_DESKTOP_MODE as string | undefined) ?? "").trim() === "true";
+
 interface Miembro {
   id: number;
   estadoAprobacion: "pendiente" | "aceptado" | "rechazado";
@@ -23,35 +27,54 @@ export function AdminView() {
   const { t } = useT();
   const [negocios, setNegocios] = useState<Negocio[]>([]);
   const [negocio, setNegocio] = useState<Negocio | null>(null);
+  const [cargado, setCargado] = useState(false);
+  const [mostrarCrear, setMostrarCrear] = useState(false);
 
   function cargar() {
-    api.get<{ negocios: Negocio[] }>("/negocios/mios").then((r) => setNegocios(r.negocios));
+    api.get<{ negocios: Negocio[] }>("/negocios/mios").then((r) => {
+      setNegocios(r.negocios);
+      setCargado(true);
+      // Si el usuario ya tiene un solo negocio, entra directo — no tiene sentido hacerlo
+      // elegir entre las opciones cuando solo hay una.
+      if (r.negocios.length === 1) setNegocio((actual) => actual ?? r.negocios[0]);
+    });
   }
   useEffect(cargar, []);
 
+  if (negocio) {
+    return (
+      <div className="container-wide">
+        <GestionEquipo negocio={negocio} onVolver={() => setNegocio(null)} />
+      </div>
+    );
+  }
+
   return (
     <div className="container">
-      {!negocio ? (
-        <>
-          <CrearNegocio onCreado={cargar} />
-          <div className="card">
-            <h2>{t("own.selectBusiness")}</h2>
-            <p className="muted small">{t("own.selectHelp")}</p>
-            {negocios.map((n) => (
-              <div className="list-item" key={n.id}>
-                <div>
-                  <h3>{n.nombreComercial}</h3>
-                  <span className="muted small">{n.direccion}</span>
-                  {n.miRol && n.miRol !== "dueno" && <> · <span className="badge">{rolNegocioLabel(n.miRol, t)}</span></>}
-                </div>
-                <button className="primary" onClick={() => setNegocio(n)}>{t("own.manage")}</button>
+      {!cargado ? (
+        <p className="muted small">{t("common.loading")}</p>
+      ) : negocios.length > 0 ? (
+        <div className="card">
+          <h2>{t("own.selectBusiness")}</h2>
+          <p className="muted small">{t("own.selectHelp")}</p>
+          {negocios.map((n) => (
+            <div className="list-item" key={n.id}>
+              <div>
+                <h3>{n.nombreComercial}</h3>
+                <span className="muted small">{n.direccion}</span>
+                {n.miRol && n.miRol !== "dueno" && <> · <span className="badge">{rolNegocioLabel(n.miRol, t)}</span></>}
               </div>
-            ))}
-            {negocios.length === 0 && <p className="muted small">{t("own.noBusinesses")}</p>}
-          </div>
-        </>
+              <button className="primary" onClick={() => setNegocio(n)}>{t("own.manage")}</button>
+            </div>
+          ))}
+          {!mostrarCrear ? (
+            <button className="ghost" style={{ marginTop: 10 }} onClick={() => setMostrarCrear(true)}>{t("own.createAnother")}</button>
+          ) : (
+            <CrearNegocio onCreado={() => { setMostrarCrear(false); cargar(); }} />
+          )}
+        </div>
       ) : (
-        <GestionEquipo negocio={negocio} onVolver={() => setNegocio(null)} />
+        <CrearNegocio onCreado={cargar} />
       )}
     </div>
   );
@@ -234,19 +257,19 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
   // Cobros, suscripción, analítica y datos del negocio siguen siendo SOLO del dueño en el
   // backend (cuentas bancarias, facturación, cancelar plan) — el frontend refleja lo mismo.
   const esDueno = !miRol || miRol === "dueno";
+  const [seccionActiva, setSeccionActiva] = useState("");
 
-  return (
-    <div>
-      <div className="row spread">
-        <h1>{negocio.nombreComercial}</h1>
-        <button className="ghost" onClick={onVolver}>{t("common.back")}</button>
-      </div>
+  // Cada sección se muestra sola en el panel de la derecha (en vez de todo apilado en una
+  // sola pantalla larga) — se arma según los mismos permisos/módulos de antes, solo que ahora
+  // cada bloque es un destino del menú lateral en lugar de una tarjeta más en la lista.
+  const secciones: { key: string; label: string; icon: string; content: React.ReactNode }[] = [];
 
-      {miRol && miRol !== "dueno" && (
-        <p className="muted small">{t("admin.enteredAs")} <strong>{rolNegocioLabel(miRol, t)}</strong> {t("admin.roleRestriction")}</p>
-      )}
-
-      {esAdmin && (
+  if (esAdmin) {
+    secciones.push({
+      key: "equipo",
+      label: t("nav.team"),
+      icon: "👥",
+      content: (
         <>
           <div className="card">
             <div className="row spread">
@@ -279,39 +302,180 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
           </div>
 
           <PersonalNegocio negocioId={negocio.id} />
+          {/* El "equipo de profesionales" con agenda solo aplica a rubros con citas — un
+              comercio minorista como una tienda de vapes no tiene profesionales que reservan. */}
+          {modulos.includes("appointments") && <Invitacion negocioId={negocio.id} />}
         </>
-      )}
+      ),
+    });
+  }
 
-      {/*
-        Módulos del motor de nicho, activados según el rubro. Solo "pos" (Comercio: vender/
-        inventario/caja) y "agro" tienen el permiso reforzado también en el backend
-        (lib/acceso.ts), así que son los únicos que el personal con rol puede abrir. El resto
-        (préstamos, mesas, taller, compras, clientes, gastos, impuestos) siguen siendo del
-        dueño únicamente en el backend — mostrarlos a personal daría una pantalla que solo
-        falla al guardar, así que quedan reservados a "esDueno" hasta que se refuerce cada uno.
-      */}
-      {modulos.includes("pos") && (puedeNegocio(miRol, "pos") || puedeNegocio(miRol, "inventario")) && <ComercioView negocio={negocio} miRol={miRol} credit={modulos.includes("credit")} />}
-      {modulos.includes("agro") && puedeNegocio(miRol, "agro") && <AgroView negocio={negocio} miRol={miRol} />}
-      {esDueno && modulos.includes("lending") && <PrestamosView negocio={negocio} />}
-      {esDueno && modulos.includes("tables") && <MesasView negocio={negocio} />}
-      {esDueno && modulos.includes("service_orders") && <ServiceOrdersView negocio={negocio} />}
-      {esDueno && modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
-      {esDueno && modulos.includes("customers") && <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} credit={modulos.includes("credit")} />}
-      {esDueno && modulos.includes("expenses") && <GastosView negocio={negocio} />}
-      {esDueno && modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}
-      {modulos.includes("storefront") && esAdmin && <TiendaLink slug={negocio.slug} />}
-      {esAdmin && <Invitacion negocioId={negocio.id} />}
+  // Solo "pos" y "agro" tienen el permiso reforzado también en el backend (lib/acceso.ts),
+  // así que son los únicos módulos que el personal con rol puede abrir. El resto (préstamos,
+  // mesas, taller, clientes) siguen siendo del dueño únicamente en el backend — mostrarlos a
+  // personal daría una pantalla que solo falla al guardar, así que quedan reservados a
+  // "esDueno" hasta que se refuerce cada uno.
+  if (modulos.includes("pos") && (puedeNegocio(miRol, "pos") || puedeNegocio(miRol, "inventario"))) {
+    secciones.push({ key: "comercio", label: t("nav.commerce"), icon: "🛒", content: <ComercioView negocio={negocio} miRol={miRol} credit={modulos.includes("credit")} /> });
+  }
+  if (modulos.includes("agro") && puedeNegocio(miRol, "agro")) {
+    secciones.push({ key: "agro", label: t("nav.agro"), icon: "🐔", content: <AgroView negocio={negocio} miRol={miRol} /> });
+  }
+  if (esDueno && modulos.includes("lending")) {
+    secciones.push({ key: "prestamos", label: t("nav.lending"), icon: "💵", content: <PrestamosView negocio={negocio} /> });
+  }
+  if (esDueno && modulos.includes("tables")) {
+    secciones.push({ key: "mesas", label: t("nav.tables"), icon: "🍽️", content: <MesasView negocio={negocio} /> });
+  }
+  if (esDueno && modulos.includes("service_orders")) {
+    secciones.push({ key: "ordenes", label: t("nav.orders"), icon: "🔧", content: <ServiceOrdersView negocio={negocio} /> });
+  }
+  if (esDueno && modulos.includes("customers")) {
+    secciones.push({ key: "clientes", label: t("nav.customers"), icon: "👤", content: <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} credit={modulos.includes("credit")} /> });
+  }
+  if (modulos.includes("storefront") && esAdmin) {
+    secciones.push({ key: "tienda", label: t("nav.store"), icon: "🌐", content: <TiendaLink slug={negocio.slug} /> });
+  }
 
-      {esDueno && (
+  // Contabilidad agrupa lo financiero (compras, gastos, impuestos, analítica) detrás de un PIN
+  // aparte del login — así un cajero con sesión iniciada no puede entrar a ver los números.
+  if (esDueno) {
+    secciones.push({
+      key: "contabilidad",
+      label: t("nav.accounting"),
+      icon: "🔒",
+      content: (
+        <ContabilidadPanel negocio={negocio}>
+          {modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
+          {modulos.includes("expenses") && <GastosView negocio={negocio} />}
+          {modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}
+          <Analitica negocioId={negocio.id} />
+        </ContabilidadPanel>
+      ),
+    });
+    secciones.push({
+      key: "config",
+      label: t("nav.settings"),
+      icon: "⚙️",
+      content: (
         <>
           <Ubicacion negocio={negocio} />
           <ImagenNegocio negocioId={negocio.id} tipo="cover" />
           <ImagenNegocio negocioId={negocio.id} tipo="logo" />
-          <Cobros negocioId={negocio.id} />
+          {/* Cobrar la fianza de una reserva solo aplica a rubros con citas (barbería, taller,
+              veterinaria...) — un comercio minorista como una tienda de vapes no toma reservas. */}
+          {modulos.includes("appointments") && <Cobros negocioId={negocio.id} />}
           <Suscripcion negocioId={negocio.id} />
-          <Analitica negocioId={negocio.id} />
         </>
+      ),
+    });
+  }
+
+  const activa = secciones.find((s) => s.key === seccionActiva) ?? secciones[0];
+
+  return (
+    <div>
+      <div className="row spread">
+        <h1>{negocio.nombreComercial}</h1>
+        <button className="ghost" onClick={onVolver}>{t("common.back")}</button>
+      </div>
+
+      {miRol && miRol !== "dueno" && (
+        <p className="muted small">{t("admin.enteredAs")} <strong>{rolNegocioLabel(miRol, t)}</strong> {t("admin.roleRestriction")}</p>
       )}
+
+      <div className="biz-layout">
+        <nav className="biz-sidebar">
+          {secciones.map((s) => (
+            <button
+              key={s.key}
+              className={`biz-sidebar-btn ${activa?.key === s.key ? "active" : ""}`}
+              onClick={() => setSeccionActiva(s.key)}
+            >
+              <span className="icon">{s.icon}</span> {s.label}
+            </button>
+          ))}
+        </nav>
+        <div className="biz-content">{activa?.content}</div>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Contabilidad: gastos/impuestos/compras/analítica detrás de un PIN aparte ----------
+function ContabilidadPanel({ negocio, children }: { negocio: Negocio; children: React.ReactNode }) {
+  const { t } = useT();
+  const [configurado, setConfigurado] = useState<boolean | null>(null);
+  const [desbloqueado, setDesbloqueado] = useState(false);
+  const [pin, setPin] = useState("");
+  const [pin2, setPin2] = useState("");
+  const [error, setError] = useState("");
+  const [cargando, setCargando] = useState(false);
+
+  useEffect(() => {
+    api.get<{ configurado: boolean }>(`/negocios/${negocio.id}/pin-contabilidad`)
+      .then((r) => setConfigurado(r.configurado))
+      .catch(() => setConfigurado(false));
+  }, [negocio.id]);
+
+  async function definirPin() {
+    setError("");
+    if (pin.length < 4) { setError(t("pin.tooShort")); return; }
+    if (pin !== pin2) { setError(t("pin.mismatch")); return; }
+    setCargando(true);
+    try {
+      await api.post(`/negocios/${negocio.id}/pin-contabilidad`, { pin });
+      setConfigurado(true);
+      setDesbloqueado(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t("common.error"));
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  async function verificarPin() {
+    setError("");
+    setCargando(true);
+    try {
+      await api.post(`/negocios/${negocio.id}/pin-contabilidad/verificar`, { pin });
+      setDesbloqueado(true);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t("common.error"));
+    } finally {
+      setCargando(false);
+    }
+  }
+
+  if (configurado === null) return <p className="muted small">{t("common.loading")}</p>;
+
+  if (desbloqueado) return <>{children}</>;
+
+  if (!configurado) {
+    return (
+      <div className="card pin-gate">
+        <h2>{t("pin.setTitle")}</h2>
+        <p className="muted small">{t("pin.setDesc")}</p>
+        <input type="password" inputMode="numeric" maxLength={20} value={pin} onChange={(e) => setPin(e.target.value)} placeholder="••••" />
+        <input type="password" inputMode="numeric" maxLength={20} value={pin2} onChange={(e) => setPin2(e.target.value)} placeholder={t("pin.repeat")} style={{ marginTop: 8 }} />
+        {error && <p className="error">{error}</p>}
+        <button className="primary" style={{ width: "100%", marginTop: 12 }} disabled={cargando} onClick={definirPin}>{t("pin.setBtn")}</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="card pin-gate">
+      <h2>{t("pin.enterTitle")}</h2>
+      <p className="muted small">{t("pin.enterDesc")}</p>
+      <input
+        type="password" inputMode="numeric" maxLength={20} value={pin} autoFocus
+        onChange={(e) => setPin(e.target.value)}
+        onKeyDown={(e) => e.key === "Enter" && verificarPin()}
+        placeholder="••••"
+      />
+      {error && <p className="error">{error}</p>}
+      <button className="primary" style={{ width: "100%", marginTop: 12 }} disabled={cargando} onClick={verificarPin}>{t("pin.unlock")}</button>
     </div>
   );
 }
@@ -329,6 +493,14 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
 
+  // App de escritorio: crea la cuenta directo, ya que un link de invitación no le llegaría a
+  // nadie (el servidor solo es alcanzable en esta misma PC).
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [nuevoEmail, setNuevoEmail] = useState("");
+  const [nuevoTelefono, setNuevoTelefono] = useState("");
+  const [nuevaClave, setNuevaClave] = useState("");
+  const [creando, setCreando] = useState(false);
+
   function cargar() {
     api.get<{ miembros: MiembroFuncional[] }>(`/negocios/${negocioId}/miembros`)
       .then((r) => setMiembros(r.miembros)).catch((e) => setError(e instanceof ApiError ? e.message : t("common.error")));
@@ -342,6 +514,22 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
       setUrl(r.url);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("common.error"));
+    }
+  }
+
+  async function crearDirecto() {
+    setError("");
+    setCreando(true);
+    try {
+      await api.post(`/negocios/${negocioId}/miembros/crear-directo`, {
+        nombre: nuevoNombre, email: nuevoEmail, telefono: nuevoTelefono, password: nuevaClave, rol: rolInvitar,
+      });
+      setNuevoNombre(""); setNuevoEmail(""); setNuevoTelefono(""); setNuevaClave("");
+      cargar();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t("common.error"));
+    } finally {
+      setCreando(false);
     }
   }
 
@@ -375,17 +563,36 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
       ))}
       {miembros.length === 0 && <p className="muted small">{t("admin.noStaffYet")}</p>}
 
-      <div className="row" style={{ marginTop: 10 }}>
-        <select value={rolInvitar} onChange={(e) => setRolInvitar(e.target.value as typeof rolInvitar)}>
-          {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
-        </select>
-        <button className="primary" onClick={invitar}>{t("admin.generateInvite")}</button>
-      </div>
-      {url && (
-        <div className="row" style={{ marginTop: 10 }}>
-          <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-          <button className="ghost" onClick={() => navigator.clipboard?.writeText(url)}>{t("admin.copy")}</button>
+      {DESKTOP_MODE ? (
+        <div style={{ marginTop: 10 }}>
+          <div className="grid grid-2">
+            <input placeholder={t("staff.name")} value={nuevoNombre} onChange={(e) => setNuevoNombre(e.target.value)} />
+            <input placeholder={t("staff.phone")} value={nuevoTelefono} onChange={(e) => setNuevoTelefono(e.target.value)} />
+            <input placeholder={t("staff.email")} value={nuevoEmail} onChange={(e) => setNuevoEmail(e.target.value)} />
+            <input type="password" placeholder={t("staff.password")} value={nuevaClave} onChange={(e) => setNuevaClave(e.target.value)} />
+          </div>
+          <div className="row" style={{ marginTop: 8 }}>
+            <select value={rolInvitar} onChange={(e) => setRolInvitar(e.target.value as typeof rolInvitar)}>
+              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
+            </select>
+            <button className="primary" disabled={creando} onClick={crearDirecto}>{t("staff.create")}</button>
+          </div>
         </div>
+      ) : (
+        <>
+          <div className="row" style={{ marginTop: 10 }}>
+            <select value={rolInvitar} onChange={(e) => setRolInvitar(e.target.value as typeof rolInvitar)}>
+              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
+            </select>
+            <button className="primary" onClick={invitar}>{t("admin.generateInvite")}</button>
+          </div>
+          {url && (
+            <div className="row" style={{ marginTop: 10 }}>
+              <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
+              <button className="ghost" onClick={() => navigator.clipboard?.writeText(url)}>{t("admin.copy")}</button>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -519,7 +726,11 @@ function Invitacion({ negocioId }: { negocioId: string }) {
   );
 }
 
-interface Plan { id: string; nombre: string; mensualUsd: number; anualUsd: number; anualPorMes: number; ahorroAnualUsd: number; maxNegocios: number; maxPeluqueros: number; }
+interface Plan {
+  id: string; nombre: string; tipo: "suscripcion" | "pago_unico";
+  mensualUsd?: number; anualUsd?: number; anualPorMes?: number; ahorroAnualUsd?: number;
+  maxNegocios: number; maxPeluqueros: number;
+}
 interface EstadoSub { estadoSuscripcion: string; plan: string | null; intervaloPlan: string | null; suscripcionHasta: string | null; }
 
 function Suscripcion({ negocioId }: { negocioId: string }) {
@@ -542,6 +753,10 @@ function Suscripcion({ negocioId }: { negocioId: string }) {
     else { setMsg(r.mensaje ?? "OK"); cargar(); }
   }
 
+  // Suscripciones de la nube (Básico/Pro): no tienen sentido dentro de la app de escritorio,
+  // que ya corre bajo su propia licencia — ahí solo se muestra el estado y el pedido a medida.
+  const planesSuscripcion = planes.filter((p) => p.tipo === "suscripcion");
+
   return (
     <div className="card">
       <h2>{t("own.subscription")}</h2>
@@ -553,41 +768,99 @@ function Suscripcion({ negocioId }: { negocioId: string }) {
         </p>
       )}
 
-      {/* Toggle mensual / anual */}
-      <div className="lang-toggle" style={{ margin: "10px 0 16px" }}>
-        <button className={intervalo === "mensual" ? "on" : ""} onClick={() => setIntervalo("mensual")}>{t("own.monthly")}</button>
-        <button className={intervalo === "anual" ? "on" : ""} onClick={() => setIntervalo("anual")}>{t("own.annual")} · {t("own.save2months")}</button>
-      </div>
+      {!DESKTOP_MODE && (
+        <>
+          {/* Toggle mensual / anual */}
+          <div className="lang-toggle" style={{ margin: "10px 0 16px" }}>
+            <button className={intervalo === "mensual" ? "on" : ""} onClick={() => setIntervalo("mensual")}>{t("own.monthly")}</button>
+            <button className={intervalo === "anual" ? "on" : ""} onClick={() => setIntervalo("anual")}>{t("own.annual")} · {t("own.save2months")}</button>
+          </div>
 
-      <div className="grid grid-2">
-        {planes.map((p) => {
-          const activo = estado?.plan === p.id && estado?.estadoSuscripcion === "activo";
-          return (
-            <div className="card" key={p.id} style={{ margin: 0, borderColor: activo ? "var(--brand-500)" : undefined }}>
-              <div className="row spread">
-                <h3>{p.nombre}</h3>
-                {intervalo === "anual" && <span className="badge ok">-${p.ahorroAnualUsd}</span>}
-              </div>
-              {intervalo === "mensual" ? (
-                <div style={{ margin: "8px 0" }}><span style={{ fontSize: 30, fontWeight: 800 }}>${p.mensualUsd}</span><span className="muted">{t("own.perMonth")}</span></div>
-              ) : (
-                <div style={{ margin: "8px 0" }}>
-                  <span style={{ fontSize: 30, fontWeight: 800 }}>${p.anualUsd}</span><span className="muted">{t("own.perYear")}</span>
-                  <div className="muted small">${p.anualPorMes}{t("own.perMonth")} · {t("own.annualBilled")}</div>
+          <div className="grid grid-2">
+            {planesSuscripcion.map((p) => {
+              const activo = estado?.plan === p.id && estado?.estadoSuscripcion === "activo";
+              return (
+                <div className="card" key={p.id} style={{ margin: 0, borderColor: activo ? "var(--brand-500)" : undefined }}>
+                  <div className="row spread">
+                    <h3>{p.nombre}</h3>
+                    {intervalo === "anual" && <span className="badge ok">-${p.ahorroAnualUsd}</span>}
+                  </div>
+                  {intervalo === "mensual" ? (
+                    <div style={{ margin: "8px 0" }}><span style={{ fontSize: 30, fontWeight: 800 }}>${p.mensualUsd}</span><span className="muted">{t("own.perMonth")}</span></div>
+                  ) : (
+                    <div style={{ margin: "8px 0" }}>
+                      <span style={{ fontSize: 30, fontWeight: 800 }}>${p.anualUsd}</span><span className="muted">{t("own.perYear")}</span>
+                      <div className="muted small">${p.anualPorMes}{t("own.perMonth")} · {t("own.annualBilled")}</div>
+                    </div>
+                  )}
+                  <ul className="muted small" style={{ margin: "8px 0 10px", paddingLeft: 18 }}>
+                    <li>✅ {p.maxNegocios} {t("plan.businessesLabel")}</li>
+                    <li>✅ {t("plan.upTo")} {p.maxPeluqueros} {t("plan.prosLabel")}</li>
+                  </ul>
+                  <button className={activo ? "ghost" : "primary"} style={{ width: "100%", marginTop: 6 }} onClick={() => elegir(p.id)}>
+                    {activo ? `✓ ${t("own.currentPlan")}` : t("own.choosePlan")}
+                  </button>
                 </div>
-              )}
-              <ul className="muted small" style={{ margin: "8px 0 10px", paddingLeft: 18 }}>
-                <li>✅ {p.maxNegocios} {t("plan.businessesLabel")}</li>
-                <li>✅ {t("plan.upTo")} {p.maxPeluqueros} {t("plan.prosLabel")}</li>
-              </ul>
-              <button className={activo ? "ghost" : "primary"} style={{ width: "100%", marginTop: 6 }} onClick={() => elegir(p.id)}>
-                {activo ? `✓ ${t("own.currentPlan")}` : t("own.choosePlan")}
-              </button>
-            </div>
-          );
-        })}
-      </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      <SolicitarFuncion negocioId={negocioId} />
       {msg && <p className="success">{msg}</p>}
+    </div>
+  );
+}
+
+// Ya con un plan/licencia activo, este es el canal para pedir algo puntual para TU sistema
+// (no es un catálogo — se cotiza aparte). Va por email a soporte, sin flujo de pago acá.
+function SolicitarFuncion({ negocioId }: { negocioId: string }) {
+  const { t } = useT();
+  const [abierto, setAbierto] = useState(false);
+  const [descripcion, setDescripcion] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+
+  async function enviar() {
+    setError(""); setMsg("");
+    if (descripcion.trim().length < 10) { setError(t("feature.tooShort")); return; }
+    setEnviando(true);
+    try {
+      await api.post(`/negocios/${negocioId}/solicitar-funcion`, { descripcion });
+      setMsg(t("feature.sent"));
+      setDescripcion(""); setAbierto(false);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : t("common.error"));
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <h3 style={{ marginTop: 0 }}>{t("feature.title")}</h3>
+      <p className="muted small">{t("feature.desc")}</p>
+      {!abierto ? (
+        <button className="ghost" onClick={() => setAbierto(true)}>{t("feature.cta")}</button>
+      ) : (
+        <>
+          <textarea
+            rows={4}
+            value={descripcion}
+            onChange={(e) => setDescripcion(e.target.value)}
+            placeholder={t("feature.placeholder")}
+            style={{ width: "100%" }}
+          />
+          {error && <p className="error">{error}</p>}
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="primary" disabled={enviando} onClick={enviar}>{t("feature.send")}</button>
+            <button className="ghost" onClick={() => setAbierto(false)}>{t("common.cancel")}</button>
+          </div>
+        </>
+      )}
+      {msg && <p className="success small">{msg}</p>}
     </div>
   );
 }

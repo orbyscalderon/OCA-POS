@@ -98,6 +98,9 @@ a:hover { color: var(--brand-300); }
 }
 
 .container { max-width: 900px; margin: 0 auto; padding: 26px 22px; }
+/* Panel de negocio (sidebar + contenido): más ancho que un formulario normal, para que el
+   menú lateral quede pegado a la izquierda en vez de flotar en medio de la pantalla. */
+.container-wide { max-width: 1440px; margin: 0 auto; padding: 26px 22px; }
 
 /* --------- Cards --------- */
 .card {
@@ -552,6 +555,60 @@ h3 { font-size: 15px; margin: 0; font-weight: 600; }
     transition-duration: .001ms !important;
     scroll-behavior: auto !important;
   }
+}
+
+/* --------- Panel de negocio: sidebar + contenido --------- */
+.biz-layout { display: flex; gap: 22px; align-items: flex-start; margin-top: 14px; }
+.biz-sidebar {
+  flex: 0 0 210px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  position: sticky;
+  top: 14px;
+}
+.biz-sidebar-btn {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+  transition: background .15s ease, border-color .15s ease;
+}
+.biz-sidebar-btn .icon { font-size: 16px; width: 20px; text-align: center; flex-shrink: 0; }
+.biz-sidebar-btn:hover { background: var(--surface-2); }
+.biz-sidebar-btn.active { background: var(--surface-2); border-color: var(--border-strong); color: var(--brand-300); }
+.biz-content { flex: 1; min-width: 0; }
+
+@media (max-width: 860px) {
+  .biz-layout { flex-direction: column; }
+  .biz-sidebar {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    width: 100%;
+    position: static;
+    gap: 6px;
+    padding-bottom: 4px;
+  }
+  .biz-sidebar-btn { flex: 0 0 auto; white-space: nowrap; }
+}
+
+/* --------- Panel de Contabilidad: pantalla de PIN --------- */
+.pin-gate { max-width: 320px; margin: 40px auto; text-align: center; }
+.pin-gate input {
+  text-align: center;
+  font-size: 22px;
+  letter-spacing: 6px;
+  padding: 12px;
 }
 
 /* --------- Responsive --------- */

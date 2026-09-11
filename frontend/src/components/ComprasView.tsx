@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
 import { hoyLocal, formatFechaLocal } from "../dateUtils";
+import { useT } from "../i18n";
 
 // Módulo COMPRAS (reposición de inventario desde proveedores).
 interface Producto { id: string; nombre: string; costo: string | number | null }
@@ -10,6 +11,7 @@ const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const hoy = hoyLocal;
 
 export function ComprasView({ negocio }: { negocio: Negocio }) {
+  const { t } = useT();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [compras, setCompras] = useState<Compra[]>([]);
   const [proveedor, setProveedor] = useState("");
@@ -34,56 +36,56 @@ export function ComprasView({ negocio }: { negocio: Negocio }) {
 
   async function guardar(e: React.FormEvent) {
     e.preventDefault(); setError(""); setMsg("");
-    if (lineas.length === 0) { setError("Agrega al menos una línea."); return; }
+    if (lineas.length === 0) { setError(t("compras.needLine")); return; }
     try {
       await api.post("/compras", { negocioId: negocio.id, proveedor, fecha, lineas });
-      setMsg("Compra registrada y stock actualizado."); setLineas([]); setProveedor(""); cargar();
-    } catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
+      setMsg(t("compras.registered")); setLineas([]); setProveedor(""); cargar();
+    } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
   const total = lineas.reduce((s, x) => s + x.cantidad * x.costoUnit, 0);
 
   return (
     <div className="card">
-      <h2>📥 Compras</h2>
+      <h2>{t("compras.title")}</h2>
       <form onSubmit={guardar}>
         <div className="grid grid-2">
-          <div><label>Proveedor (opcional)</label><input value={proveedor} onChange={(e) => setProveedor(e.target.value)} /></div>
-          <div><label>Fecha</label><input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} required /></div>
+          <div><label>{t("compras.supplier")}</label><input value={proveedor} onChange={(e) => setProveedor(e.target.value)} /></div>
+          <div><label>{t("compras.date")}</label><input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} required /></div>
         </div>
 
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
           <div className="grid grid-2">
-            <div><label>Producto (o texto libre)</label>
+            <div><label>{t("compras.product")}</label>
               <select value={l.productoId} onChange={(e) => setL({ ...l, productoId: e.target.value })}>
-                <option value="">— Otro (escribir abajo) —</option>
+                <option value="">{t("compras.otherWriteBelow")}</option>
                 {productos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
               </select>
             </div>
-            <div><label>Nombre (si es otro)</label><input value={l.nombre} onChange={(e) => setL({ ...l, nombre: e.target.value })} disabled={!!l.productoId} /></div>
-            <div><label>Cantidad</label><input type="number" step="0.001" min="0" value={l.cantidad} onChange={(e) => setL({ ...l, cantidad: e.target.value })} /></div>
-            <div><label>Costo unitario</label><input type="number" step="0.01" min="0" value={l.costoUnit} onChange={(e) => setL({ ...l, costoUnit: e.target.value })} /></div>
+            <div><label>{t("compras.nameIfOther")}</label><input value={l.nombre} onChange={(e) => setL({ ...l, nombre: e.target.value })} disabled={!!l.productoId} /></div>
+            <div><label>{t("compras.quantity")}</label><input type="number" step="0.001" min="0" value={l.cantidad} onChange={(e) => setL({ ...l, cantidad: e.target.value })} /></div>
+            <div><label>{t("compras.unitCost")}</label><input type="number" step="0.01" min="0" value={l.costoUnit} onChange={(e) => setL({ ...l, costoUnit: e.target.value })} /></div>
           </div>
-          <button type="button" className="ghost" style={{ marginTop: 8 }} onClick={agregarLinea}>+ Agregar línea</button>
+          <button type="button" className="ghost" style={{ marginTop: 8 }} onClick={agregarLinea}>{t("compras.addLine")}</button>
         </div>
 
         {lineas.map((x, i) => (
           <div className="list-item" key={i}>
-            <div>{x.cantidad}× {x.nombre} {x.productoId ? <span className="badge ok">↑ stock</span> : null}</div>
+            <div>{x.cantidad}× {x.nombre} {x.productoId ? <span className="badge ok">{t("compras.stockUp")}</span> : null}</div>
             <div className="row"><strong>{money(x.cantidad * x.costoUnit)}</strong><button type="button" className="ghost small" onClick={() => setLineas((xs) => xs.filter((_, k) => k !== i))}>✕</button></div>
           </div>
         ))}
-        {lineas.length > 0 && <div className="row spread" style={{ marginTop: 8, fontWeight: 800 }}><span>Total</span><span className="grad-text">{money(total)}</span></div>}
+        {lineas.length > 0 && <div className="row spread" style={{ marginTop: 8, fontWeight: 800 }}><span>{t("compras.total")}</span><span className="grad-text">{money(total)}</span></div>}
         {error && <p className="error small">{error}</p>}
         {msg && <p className="success small">{msg}</p>}
-        <button className="primary" style={{ width: "100%", marginTop: 10 }} disabled={lineas.length === 0}>Registrar compra</button>
+        <button className="primary" style={{ width: "100%", marginTop: 10 }} disabled={lineas.length === 0}>{t("compras.registerBtn")}</button>
       </form>
 
       {compras.length > 0 && (
         <div style={{ marginTop: 14 }}>
-          <strong className="small">Compras recientes</strong>
+          <strong className="small">{t("compras.recent")}</strong>
           {compras.slice(0, 8).map((c) => (
-            <div className="list-item" key={c.id}><span className="muted small">{formatFechaLocal(c.fecha)} · {c.proveedor ?? "—"} · {c.lineas.length} ítems</span><strong>{money(c.total)}</strong></div>
+            <div className="list-item" key={c.id}><span className="muted small">{formatFechaLocal(c.fecha)} · {c.proveedor ?? "—"} · {c.lineas.length} {t("compras.items")}</span><strong>{money(c.total)}</strong></div>
           ))}
         </div>
       )}

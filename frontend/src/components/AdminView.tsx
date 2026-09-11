@@ -380,6 +380,7 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
           {/* Cobrar la fianza de una reserva solo aplica a rubros con citas (barbería, taller,
               veterinaria...) — un comercio minorista como una tienda de vapes no toma reservas. */}
           {modulos.includes("appointments") && <Cobros negocioId={negocio.id} />}
+          {DESKTOP_MODE && <Respaldo />}
           <Suscripcion negocioId={negocio.id} />
         </>
       ),
@@ -911,6 +912,64 @@ function ConfigLealtad({ negocio }: { negocio: Negocio }) {
       {error && <p className="error small">{error}</p>}
       <button className="primary" style={{ marginTop: 10 }}>{t("common.save")}</button>
     </form>
+  );
+}
+
+// Backup local: dos formas, gratis (este archivo, lo guarda el dueño donde quiera — USB, disco
+// externo, Google Drive de la PC) y en la nube (función paga, todavía no disponible — se pide
+// por el mismo canal que las demás funciones a medida).
+declare global {
+  interface Window {
+    ocapos?: {
+      crearBackup: () => Promise<{ ok: boolean; path?: string; error?: string; cancelado?: boolean }>;
+      restaurarBackup: () => Promise<{ ok: boolean; error?: string; cancelado?: boolean }>;
+    };
+  }
+}
+
+function Respaldo() {
+  const { t } = useT();
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+
+  async function crear() {
+    if (!window.ocapos) return;
+    setMsg(""); setError(""); setOcupado(true);
+    const r = await window.ocapos.crearBackup();
+    setOcupado(false);
+    if (r.ok) setMsg(`${t("backup.created")} ${r.path ?? ""}`);
+    else if (!r.cancelado) setError(r.error || t("common.error"));
+  }
+
+  async function restaurar() {
+    if (!window.ocapos) return;
+    setMsg(""); setError(""); setOcupado(true);
+    const r = await window.ocapos.restaurarBackup();
+    // Si tuvo éxito, la app se relanza sola (no hace falta mostrar nada acá).
+    setOcupado(false);
+    if (!r.ok && !r.cancelado) setError(r.error || t("common.error"));
+  }
+
+  return (
+    <div className="card">
+      <h2>{t("backup.title")}</h2>
+      <p className="muted small">{t("backup.localHelp")}</p>
+      <div className="row" style={{ gap: 8, flexWrap: "wrap" }}>
+        <button className="primary" disabled={ocupado} onClick={crear}>💾 {t("backup.create")}</button>
+        <button className="ghost" disabled={ocupado} onClick={restaurar}>♻️ {t("backup.restore")}</button>
+      </div>
+      {msg && <p className="success small" style={{ marginTop: 8 }}>{msg}</p>}
+      {error && <p className="error small" style={{ marginTop: 8 }}>{error}</p>}
+      <hr style={{ margin: "14px 0" }} />
+      <div className="row spread">
+        <div>
+          <strong className="small">{t("backup.cloudTitle")}</strong>
+          <p className="muted small" style={{ margin: "2px 0 0" }}>{t("backup.cloudHelp")}</p>
+        </div>
+        <span className="badge">{t("backup.cloudBadge")}</span>
+      </div>
+    </div>
   );
 }
 

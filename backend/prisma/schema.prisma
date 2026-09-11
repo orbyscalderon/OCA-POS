@@ -451,6 +451,11 @@ model Venta {
   clienteId    String?         @map("cliente_id")
   cliente      ClienteNegocio? @relation(fields: [clienteId], references: [id])
   createdAt    DateTime    @default(now()) @map("created_at")
+  // Anulación: la venta queda como registro histórico (no se borra) pero se marca inválida,
+  // se revierte el stock y el saldo/puntos del cliente si tenía.
+  anulada          Boolean   @default(false)
+  anuladaEn        DateTime? @map("anulada_en")
+  motivoAnulacion  String?   @map("motivo_anulacion") @db.VarChar(200)
 
   lineas LineaVenta[]
 

@@ -19,7 +19,13 @@ interface Producto {
   loteNumero: string | null; fechaVencimiento: string | null;
 }
 interface Sesion { id: string; montoInicial: string | number; abiertaEn: string; estado: string }
-interface Venta { id: string; total: string | number; metodoPago: string; createdAt: string }
+interface LineaVentaRecibo { nombre: string; cantidad: string | number; precioUnit: string | number; subtotal: string | number }
+interface Venta {
+  id: string; total: string | number; subtotal?: string | number; impuesto?: string | number;
+  metodoPago: string; createdAt: string;
+  anulada: boolean; anuladaEn: string | null; motivoAnulacion: string | null;
+  lineas?: LineaVentaRecibo[];
+}
 
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
@@ -56,6 +62,7 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   const [clienteSel, setClienteSel] = useState<ClienteLite | null>(null);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const [reciboVenta, setReciboVenta] = useState<Venta | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Líquido elegido esperando que el cajero indique cuántos ml se lleva el cliente (el tamaño
   // del tanque varía por cliente: pod de 2ml, tanque de 4ml, 6ml...). precioVenta del líquido
@@ -175,8 +182,9 @@ function agregar(p: Producto) {
     if (carrito.length === 0) return;
     if ((metodoPago === "fiado" || metodoPago === "apartado") && !clienteSel) { setError(t("pos.chooseCustomer")); return; }
     try {
-      await api.post("/pos/ventas", { negocioId: negocio.id, metodoPago, clienteId: clienteSel?.id, lineas: carrito });
+      const r = await api.post<{ venta: Venta }>("/pos/ventas", { negocioId: negocio.id, metodoPago, clienteId: clienteSel?.id, lineas: carrito });
       setMsg(`${t("pos.saleRegistered")}: ${money(total)}`);
+      setReciboVenta(r.venta);
       setCarrito([]); setClienteSel(null); setClienteQ("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : t("pos.chargeError"));
@@ -340,6 +348,43 @@ function agregar(p: Producto) {
       )}
       {msg && <p className="success" style={{ marginTop: 8 }}>{msg}</p>}
       {error && <p className="error" style={{ marginTop: 8 }}>{error}</p>}
+      {reciboVenta && <ReciboModal venta={reciboVenta} negocio={negocio} onClose={() => setReciboVenta(null)} />}
+    </div>
+  );
+}
+
+// Recibo imprimible: se muestra apenas se cobra, con botón de imprimir (usa el diálogo de
+// impresión del sistema operativo — funciona con cualquier impresora instalada, térmica o no,
+// sin depender de una librería específica). El resto de la app queda oculto al imprimir
+// gracias a la clase "no-imprimir" / "recibo-imprimible" en styles.css.
+function ReciboModal({ venta, negocio, onClose }: { venta: Venta; negocio: Negocio; onClose: () => void }) {
+  const { t } = useT();
+  return (
+    <div className="modal-overlay no-imprimir" onClick={onClose}>
+      <div className="modal" style={{ maxWidth: 340 }} onClick={(e) => e.stopPropagation()}>
+        <div className="recibo-imprimible">
+          <h3 style={{ margin: 0, textAlign: "center" }}>{negocio.nombreComercial}</h3>
+          {negocio.direccion && <p className="small" style={{ textAlign: "center", margin: "2px 0" }}>{negocio.direccion}</p>}
+          {negocio.telefonoContacto && <p className="small" style={{ textAlign: "center", margin: "2px 0" }}>{negocio.telefonoContacto}</p>}
+          <hr />
+          <p className="small" style={{ margin: "4px 0" }}>{new Date(venta.createdAt).toLocaleString()} · #{venta.id.slice(-6)}</p>
+          {(venta.lineas ?? []).map((l, i) => (
+            <div className="row spread small" key={i}>
+              <span>{num(l.cantidad)} × {l.nombre}</span>
+              <span>{money(l.subtotal)}</span>
+            </div>
+          ))}
+          <hr />
+          {venta.subtotal != null && <div className="row spread small"><span>{t("pos.subtotal")}</span><span>{money(venta.subtotal)}</span></div>}
+          {venta.impuesto != null && Number(venta.impuesto) > 0 && <div className="row spread small"><span>{t("pos.tax")}</span><span>{money(venta.impuesto)}</span></div>}
+          <div className="row spread" style={{ fontWeight: 800, fontSize: 18 }}><span>{t("pos.total")}</span><span>{money(venta.total)}</span></div>
+          <p className="small" style={{ textAlign: "center", marginTop: 8 }}>{t("pos.thanks")}</p>
+        </div>
+        <div className="row no-imprimir" style={{ marginTop: 12 }}>
+          <button className="primary" style={{ flex: 1 }} onClick={() => window.print()}>🖨️ {t("pos.print")}</button>
+          <button className="ghost" style={{ flex: 1 }} onClick={onClose}>{t("common.close")}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -655,6 +700,9 @@ export function Caja({ negocio }: { negocio: Negocio }) {
   const [resumen, setResumen] = useState<{ conteo: number; total: number; porMetodo: Record<string, number> } | null>(null);
   const [monto, setMonto] = useState("");
   const [msg, setMsg] = useState("");
+  // Anulación: se pide el motivo antes de confirmar (queda en el historial de la venta).
+  const [anulando, setAnulando] = useState<string | null>(null);
+  const [motivoAnular, setMotivoAnular] = useState("");
 
   function cargar() {
     api.get<{ sesion: Sesion | null }>(`/pos/caja/actual?negocioId=${negocio.id}`).then((r) => setSesion(r.sesion)).catch(() => {});
@@ -667,6 +715,11 @@ export function Caja({ negocio }: { negocio: Negocio }) {
   async function cerrar() {
     const r = await api.post<{ esperado: number; descuadre: number }>("/pos/caja/cerrar", { negocioId: negocio.id, montoFinal: monto || 0 });
     setMsg(`${t("pos.cashClosed")} ${t("pos.expected")}: ${money(r.esperado)} · ${t("pos.discrepancy")}: ${money(r.descuadre)}`); setMonto(""); cargar();
+  }
+
+  async function confirmarAnular(id: string) {
+    await api.post(`/pos/ventas/${id}/anular`, { motivo: motivoAnular || undefined });
+    setAnulando(null); setMotivoAnular(""); cargar();
   }
 
   return (
@@ -699,7 +752,29 @@ export function Caja({ negocio }: { negocio: Negocio }) {
         <div className="card" style={{ marginTop: 10 }}>
           <strong className="small">{t("pos.recentSales")}</strong>
           {ventas.slice(0, 10).map((v) => (
-            <div className="list-item" key={v.id}><span className="muted small">{new Date(v.createdAt).toLocaleTimeString()} · {v.metodoPago}</span><strong>{money(v.total)}</strong></div>
+            <div key={v.id}>
+              <div className="list-item">
+                <span className="muted small" style={v.anulada ? { textDecoration: "line-through" } : undefined}>
+                  {new Date(v.createdAt).toLocaleTimeString()} · {v.metodoPago}
+                  {v.anulada && <span className="error"> · {t("pos.voided")}</span>}
+                </span>
+                <div className="row" style={{ gap: 8 }}>
+                  <strong style={v.anulada ? { textDecoration: "line-through", opacity: .6 } : undefined}>{money(v.total)}</strong>
+                  {!v.anulada && (
+                    <button type="button" className="ghost small" onClick={() => { setAnulando(anulando === v.id ? null : v.id); setMotivoAnular(""); }}>
+                      {t("pos.void")}
+                    </button>
+                  )}
+                </div>
+              </div>
+              {anulando === v.id && (
+                <div className="row" style={{ gap: 6, padding: "0 4px 8px" }}>
+                  <input placeholder={t("pos.voidReason")} value={motivoAnular} onChange={(e) => setMotivoAnular(e.target.value)} style={{ flex: 1 }} />
+                  <button type="button" className="primary small" onClick={() => confirmarAnular(v.id)}>{t("pos.voidConfirm")}</button>
+                  <button type="button" className="ghost small" onClick={() => setAnulando(null)}>{t("common.cancel")}</button>
+                </div>
+              )}
+            </div>
           ))}
         </div>
       )}

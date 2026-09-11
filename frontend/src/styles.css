@@ -616,3 +616,29 @@ h3 { font-size: 15px; margin: 0; font-weight: 600; }
   .container { padding: 18px 14px; }
   h1 { font-size: 23px; }
 }
+
+/* --------- Modal genérico (recibo, confirmaciones) --------- */
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(10,11,15,.78); backdrop-filter: blur(6px);
+  display: flex; align-items: center; justify-content: center;
+  padding: 16px;
+}
+.modal {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  padding: 20px; width: 100%; max-height: 90vh; overflow-y: auto;
+}
+
+/* --------- Recibo imprimible --------- */
+/* Al imprimir, solo se ve el recibo (fondo blanco, texto negro) — el resto de la app queda
+   oculto sin importar dónde esté montado en el DOM. */
+@media print {
+  body * { visibility: hidden; }
+  .recibo-imprimible, .recibo-imprimible * { visibility: visible; }
+  .recibo-imprimible {
+    position: absolute; top: 0; left: 0; width: 100%;
+    color: #000; background: #fff; padding: 8px;
+  }
+  .no-imprimir { display: none !important; }
+}

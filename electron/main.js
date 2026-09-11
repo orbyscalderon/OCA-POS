@@ -1,13 +1,14 @@
 // Proceso principal de Electron: levanta un Postgres embebido (PGlite), arranca el backend
 // real de OCA POS (backend/dist/server.js, sin ningún cambio de código) apuntando a esa base
 // local, y abre una ventana que carga el frontend servido por ese mismo backend.
-const { app, BrowserWindow, ipcMain } = require("electron");
+const { app, BrowserWindow, ipcMain, dialog } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { PGlite } = require("@electric-sql/pglite");
 const { PGLiteSocketServer } = require("@electric-sql/pglite-socket");
+const tar = require("tar");
 const licencia = require("./licencia.js");
 
 const PG_PORT = 55432;
@@ -159,10 +160,83 @@ function createWindow() {
     width: 1280,
     height: 800,
     autoHideMenuBar: true,
-    webPreferences: { contextIsolation: true, nodeIntegration: false },
+    webPreferences: { contextIsolation: true, nodeIntegration: false, preload: path.join(__dirname, "preload.js") },
   });
   mainWindow.loadURL(`http://127.0.0.1:${BACKEND_PORT}`);
 }
+
+// ---------- Backup local ----------
+// Copia de seguridad: dumpDataDir() de PGlite empaqueta el directorio de datos completo en un
+// .tar.gz — no hace falta un pg_dump aparte. Vive en el proceso main (acá está la instancia de
+// `db`), por eso se expone por IPC en vez de un endpoint del backend (que corre en otro proceso
+// y solo habla con la base por el socket, no tiene el objeto PGlite).
+ipcMain.handle("crear-backup", async () => {
+  try {
+    const fecha = new Date().toISOString().replace(/[:.]/g, "-");
+    const { canceled, filePath } = await dialog.showSaveDialog(mainWindow, {
+      title: "Guardar copia de seguridad",
+      defaultPath: `oca-pos-backup-${fecha}.tar.gz`,
+      filters: [{ name: "Copia de seguridad OCA POS", extensions: ["gz"] }],
+    });
+    if (canceled || !filePath) return { ok: false, cancelado: true };
+    const archivo = await db.dumpDataDir("gzip");
+    const buffer = Buffer.from(await archivo.arrayBuffer());
+    fs.writeFileSync(filePath, buffer);
+    return { ok: true, path: filePath };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
+
+// Restaurar: se extrae primero a una carpeta temporal y se valida (¿tiene PG_VERSION?) antes de
+// tocar nada — si el archivo está corrupto o no es una copia de OCA POS, falla ahí sin haber
+// arriesgado los datos actuales. La carpeta vieja no se borra, se renombra como respaldo por si
+// algo sale mal. Como hay que cerrar la base y el backend para reemplazar los archivos, se
+// relanza la app entera al final en vez de tratar de "revivir" todo en caliente.
+ipcMain.handle("restaurar-backup", async () => {
+  try {
+    const { canceled, filePaths } = await dialog.showOpenDialog(mainWindow, {
+      title: "Elegir copia de seguridad a restaurar",
+      properties: ["openFile"],
+      filters: [{ name: "Copia de seguridad OCA POS", extensions: ["gz", "tar"] }],
+    });
+    if (canceled || !filePaths[0]) return { ok: false, cancelado: true };
+    const origen = filePaths[0];
+
+    const confirmacion = await dialog.showMessageBox(mainWindow, {
+      type: "warning",
+      buttons: ["Cancelar", "Sí, reemplazar todo"],
+      defaultId: 0,
+      cancelId: 0,
+      title: "Restaurar copia de seguridad",
+      message:
+        "Esto reemplaza TODOS los datos actuales (productos, ventas, clientes) por los de la copia elegida. Esta acción no se puede deshacer. ¿Continuar?",
+    });
+    if (confirmacion.response !== 1) return { ok: false, cancelado: true };
+
+    const tempDir = path.join(app.getPath("temp"), `oca-pos-restore-${Date.now()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+    await tar.x({ file: origen, cwd: tempDir });
+    if (!fs.existsSync(path.join(tempDir, "PG_VERSION"))) {
+      fs.rmSync(tempDir, { recursive: true, force: true });
+      return { ok: false, error: "El archivo elegido no es una copia de seguridad válida de OCA POS" };
+    }
+
+    backendProcess?.kill();
+    await socketServer?.stop().catch(() => {});
+    await db?.close().catch(() => {});
+
+    const respaldoPrevio = `${pgDataDir}.antes-de-restaurar-${Date.now()}`;
+    fs.renameSync(pgDataDir, respaldoPrevio);
+    fs.renameSync(tempDir, pgDataDir);
+
+    app.relaunch();
+    app.exit(0);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err) };
+  }
+});
 
 // Llama al backend de la nube para activar/revalidar la licencia. Solo hace falta internet
 // para esta llamada puntual — el resultado firmado queda guardado localmente y desde ahí

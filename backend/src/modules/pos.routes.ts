@@ -169,7 +169,8 @@ posRouter.post(
   }),
 );
 
-// Ventas del día (o de una fecha) con totales.
+// Ventas del día (o de una fecha) con totales. Las anuladas se listan (con su marca) pero no
+// cuentan en el resumen — ya no representan dinero real cobrado.
 posRouter.get(
   "/ventas",
   requireAuth,
@@ -182,9 +183,69 @@ posRouter.get(
       include: { lineas: true },
       orderBy: { createdAt: "desc" },
     });
-    const total = round2(ventas.reduce((s, v) => s + Number(v.total), 0));
+    const validas = ventas.filter((v) => !v.anulada);
+    const total = round2(validas.reduce((s, v) => s + Number(v.total), 0));
     const porMetodo: Record<string, number> = {};
-    for (const v of ventas) porMetodo[v.metodoPago] = round2((porMetodo[v.metodoPago] ?? 0) + Number(v.total));
-    res.json({ ventas, resumen: { conteo: ventas.length, total, porMetodo } });
+    for (const v of validas) porMetodo[v.metodoPago] = round2((porMetodo[v.metodoPago] ?? 0) + Number(v.total));
+    res.json({ ventas, resumen: { conteo: validas.length, total, porMetodo } });
+  }),
+);
+
+// Anular una venta: revierte el stock (y el de recargas, en el producto fuente), el saldo
+// fiado/apartado y los puntos de fidelidad si el cliente los había recibido por esta venta.
+// No se borra el registro — queda marcado como anulado para el historial y las auditorías.
+// Solo dueño o gerente: un cajero no debe poder borrar sus propias ventas del reporte de caja.
+const anularSchema = z.object({ motivo: z.string().max(200).optional() });
+posRouter.post(
+  "/ventas/:id/anular",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const { motivo } = anularSchema.parse(req.body);
+    const venta = await prisma.venta.findUnique({ where: { id: req.params.id }, include: { lineas: true } });
+    if (!venta) throw NotFound("Venta no encontrada");
+    const rol = await requireAcceso(venta.negocioId, req.user!.sub, req.user!.rol, "pos");
+    if (rol !== "dueno" && rol !== "gerente") throw BadRequest("Solo el dueño o un gerente puede anular una venta", "SIN_PERMISO");
+    if (venta.anulada) throw Conflict("Esta venta ya estaba anulada", "YA_ANULADA");
+
+    const idsProductos = venta.lineas.map((l) => l.productoId).filter(Boolean) as string[];
+    const productos = idsProductos.length
+      ? await prisma.producto.findMany({ where: { id: { in: idsProductos } } })
+      : [];
+    const mapProd = new Map(productos.map((p) => [p.id, p]));
+
+    const negocio = await prisma.negocio.findUnique({ where: { id: venta.negocioId }, select: { puntosPorVenta: true } });
+
+    await prisma.$transaction(async (tx) => {
+      for (const l of venta.lineas) {
+        if (!l.productoId || !mapProd.has(l.productoId)) continue;
+        const prod = mapProd.get(l.productoId)!;
+        if (prod.productoFuenteId && prod.rendimientoPorVenta) {
+          const consumo = Number(l.cantidad) * Number(prod.rendimientoPorVenta);
+          await tx.producto.update({ where: { id: prod.productoFuenteId }, data: { stock: { increment: consumo } } });
+          await tx.movimientoStock.create({
+            data: { productoId: prod.productoFuenteId, tipo: "anulacion", cantidad: Math.abs(consumo), motivo: `Anulación venta ${venta.id.slice(-6)} (${prod.nombre})` },
+          });
+        } else {
+          await tx.producto.update({ where: { id: l.productoId }, data: { stock: { increment: l.cantidad } } });
+          await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "anulacion", cantidad: Math.abs(Number(l.cantidad)), motivo: `Anulación venta ${venta.id.slice(-6)}` } });
+        }
+      }
+      if (venta.clienteId) {
+        const cliente = await tx.clienteNegocio.findUnique({ where: { id: venta.clienteId }, select: { saldoFiado: true, puntos: true } });
+        if (cliente) {
+          const data: { saldoFiado?: number; puntos?: number } = {};
+          if (venta.metodoPago === "fiado" || venta.metodoPago === "apartado") {
+            data.saldoFiado = Math.max(0, round2(Number(cliente.saldoFiado) - Number(venta.total)));
+          }
+          if (negocio?.puntosPorVenta) {
+            data.puntos = Math.max(0, cliente.puntos - negocio.puntosPorVenta);
+          }
+          if (Object.keys(data).length > 0) await tx.clienteNegocio.update({ where: { id: venta.clienteId }, data });
+        }
+      }
+      await tx.venta.update({ where: { id: venta.id }, data: { anulada: true, anuladaEn: new Date(), motivoAnulacion: motivo ?? null } });
+    });
+
+    res.json({ ok: true });
   }),
 );

@@ -86,6 +86,9 @@ export default function App() {
   }, []);
   // El superadmin puede alternar entre su panel, gestionar su propio negocio, o ver como cliente.
   const [modoSuper, setModoSuper] = useState<"panel" | "negocio" | "cliente">("panel");
+  // El panel de negocio (AdminView con un negocio elegido) trae su propio footer bajo el menú
+  // lateral — mientras esté activo, el footer centrado de toda la app queda de más.
+  const [panelNegocioActivo, setPanelNegocioActivo] = useState(false);
 
   // Una cuenta "cliente" normal reserva citas — pero si además es personal invitado de algún
   // negocio (cajero/inventario/contador), debe ir al panel de negocio, no a la pantalla de reservas.
@@ -230,17 +233,17 @@ export default function App() {
       {usuario.rol === "cliente" && (
         esPersonalDeNegocio === null
           ? <div className="container"><p className="muted">{t("common.loading")}</p></div>
-          : esPersonalDeNegocio ? <AdminView /> : <ClienteView />
+          : esPersonalDeNegocio ? <AdminView onPanelActivo={setPanelNegocioActivo} /> : <ClienteView />
       )}
       {usuario.rol === "peluquero" && <PeluqueroView />}
-      {usuario.rol === "admin_negocio" && <AdminView />}
+      {usuario.rol === "admin_negocio" && <AdminView onPanelActivo={setPanelNegocioActivo} />}
       {usuario.rol === "superadmin" && (
         modoSuper === "panel" ? <SuperadminView /> :
         modoSuper === "cliente" ? <ClienteView /> :
-        <><AdminView /><PeluqueroView /></>
+        <><AdminView onPanelActivo={setPanelNegocioActivo} /><PeluqueroView /></>
       )}
 
-      <Footer />
+      {!panelNegocioActivo && <Footer />}
       <CookieConsent />
     </>
   );

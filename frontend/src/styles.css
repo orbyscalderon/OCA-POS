@@ -588,8 +588,24 @@ h3 { font-size: 15px; margin: 0; font-weight: 600; }
 .biz-sidebar-btn.active { background: var(--surface-2); border-color: var(--border-strong); color: var(--brand-300); }
 .biz-content { flex: 1; min-width: 0; }
 
+/* Pie de página del panel de negocio: bajo el menú lateral, no centrado abajo de toda la
+   página (donde quedaba desconectado del resto de la barra izquierda). */
+.biz-sidebar-footer {
+  margin-top: 18px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--faint);
+}
+.biz-sidebar-footer a { color: var(--faint); }
+.biz-sidebar-footer a:hover { color: var(--muted); }
+
 @media (max-width: 860px) {
   .biz-layout { flex-direction: column; }
+  /* La barra lateral pasa a ser una fila horizontal con scroll (ver abajo) — no hay dónde
+     acomodar un bloque de texto de varias líneas ahí, así que en pantallas chicas se oculta. */
+  .biz-sidebar-footer { display: none; }
   .biz-sidebar {
     flex-direction: row;
     flex-wrap: nowrap;

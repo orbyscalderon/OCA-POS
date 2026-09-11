@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, assetUrl, descargarCSV, puedeNegocio, rolNegocioLabel, ROLES_ASIGNABLES, type Negocio, type Perfil, type RolNegocio } from "../api";
 import { useT } from "../i18n";
+import { COMPANY } from "../company";
 import { Stat } from "./Ui";
 import { MapaUbicacion } from "./MapaUbicacion";
 import { PrestamosView } from "./PrestamosView";
@@ -23,7 +24,10 @@ interface Miembro {
   usuario: { id: number; nombre: string; email: string; telefono: string };
 }
 
-export function AdminView() {
+// El panel de un negocio (con su menú lateral) trae su propio pie de página bajo el menú, así
+// que el layout general no debe repetir el footer centrado flotando debajo de todo — avisa al
+// padre cuándo está mostrando ese panel para que oculte el suyo.
+export function AdminView({ onPanelActivo }: { onPanelActivo?: (activo: boolean) => void } = {}) {
   const { t } = useT();
   const [negocios, setNegocios] = useState<Negocio[]>([]);
   const [negocio, setNegocio] = useState<Negocio | null>(null);
@@ -40,6 +44,7 @@ export function AdminView() {
     });
   }
   useEffect(cargar, []);
+  useEffect(() => { onPanelActivo?.(!!negocio); return () => onPanelActivo?.(false); }, [negocio]);
 
   if (negocio) {
     return (
@@ -411,6 +416,13 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
               <span className="icon">{s.icon}</span> {s.label}
             </button>
           ))}
+          <div className="biz-sidebar-footer">
+            <div>
+              <a href="/terminos" target="_blank" rel="noreferrer">{t("footer.terms")}</a> · <a href="/privacidad" target="_blank" rel="noreferrer">{t("footer.privacy")}</a>
+            </div>
+            <div>{t("footer.operatedBy")} {COMPANY.nombre}</div>
+            <div>© {new Date().getFullYear()} OCA POS</div>
+          </div>
         </nav>
         <div className="biz-content">{activa?.content}</div>
       </div>

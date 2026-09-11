@@ -4,6 +4,7 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { env } from "./config/env.js";
+import { obtenerIpLocal } from "./lib/lanIp.js";
 import { errorHandler } from "./middleware/errorHandler.js";
 import { authRouter } from "./modules/auth.routes.js";
 import { negociosRouter } from "./modules/negocios.routes.js";
@@ -73,6 +74,15 @@ export function crearApp() {
   app.use("/uploads", express.static(path.resolve(env.uploadDir)));
 
   app.get("/api/health", (_req, res) => res.json({ ok: true, service: "turno-api" }));
+
+  // App de escritorio: la URL en la que este equipo es alcanzable desde OTROS dispositivos en
+  // la misma red WiFi/LAN (no 127.0.0.1, que solo funciona en esta misma PC) — para compartir
+  // la tienda online con clientes conectados a la misma red, sin depender de internet.
+  app.get("/api/system/lan-url", (_req, res) => {
+    if (!env.desktopMode) return res.json({ lanUrl: null });
+    const ip = obtenerIpLocal();
+    res.json({ lanUrl: ip ? `http://${ip}:${env.port}` : null });
+  });
 
   app.use("/api", apiLimiter);
   app.use("/api/auth", authLimiter, authRouter);

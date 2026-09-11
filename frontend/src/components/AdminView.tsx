@@ -201,17 +201,29 @@ function CrearNegocio({ onCreado }: { onCreado: () => void }) {
 // Tienda online: enlace público para compartir (módulo storefront).
 function TiendaLink({ slug }: { slug: string }) {
   const { t } = useT();
-  const url = `${window.location.origin}/tienda/${slug}`;
+  // App de escritorio: 127.0.0.1 (el origen de esta ventana) solo funciona en ESTA PC — para
+  // que un cliente en el mismo WiFi lo pueda abrir hace falta la IP real de la PC en la red.
+  const [lanUrl, setLanUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!DESKTOP_MODE) return;
+    api.get<{ lanUrl: string | null }>("/system/lan-url").then((r) => setLanUrl(r.lanUrl)).catch(() => {});
+  }, []);
+  const base = DESKTOP_MODE ? lanUrl : window.location.origin;
+  const url = base ? `${base}/tienda/${slug}` : null;
   const [copiado, setCopiado] = useState(false);
   return (
     <div className="card">
       <h2>{t("admin.storeTitle")}</h2>
-      <p className="muted small">{t("admin.storeShare")}</p>
-      <div className="row" style={{ marginTop: 8 }}>
-        <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-        <button className="ghost" onClick={() => { navigator.clipboard?.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>{copiado ? t("admin.copied") : t("admin.copy")}</button>
-        <a href={url} target="_blank" rel="noreferrer"><button className="ghost">{t("admin.open")}</button></a>
-      </div>
+      <p className="muted small">{DESKTOP_MODE ? t("admin.storeShareLan") : t("admin.storeShare")}</p>
+      {url ? (
+        <div className="row" style={{ marginTop: 8 }}>
+          <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
+          <button className="ghost" onClick={() => { navigator.clipboard?.writeText(url); setCopiado(true); setTimeout(() => setCopiado(false), 1500); }}>{copiado ? t("admin.copied") : t("admin.copy")}</button>
+          <a href={url} target="_blank" rel="noreferrer"><button className="ghost">{t("admin.open")}</button></a>
+        </div>
+      ) : (
+        <p className="muted small">{t("admin.storeNoLan")}</p>
+      )}
     </div>
   );
 }

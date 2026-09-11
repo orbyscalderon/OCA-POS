@@ -355,6 +355,8 @@ const dict = {
   // AdminView: tienda online, aviso de rol, personal
   "admin.storeTitle": { es: "🛍️ Tienda online", en: "🛍️ Online store" },
   "admin.storeShare": { es: "Comparte este enlace: tus clientes ven tu catálogo y te piden por WhatsApp.", en: "Share this link: your customers see your catalog and order via WhatsApp." },
+  "admin.storeShareLan": { es: "Este enlace funciona para clientes conectados a tu mismo WiFi. Para que funcione desde cualquier red hace falta publicar la tienda en la nube (próximamente).", en: "This link works for customers connected to your same WiFi. To work from any network, the store needs to be published to the cloud (coming soon)." },
+  "admin.storeNoLan": { es: "No se pudo detectar la red WiFi de esta PC.", en: "Couldn't detect this PC's WiFi network." },
   "admin.copied": { es: "¡Copiado!", en: "Copied!" },
   "admin.copy": { es: "Copiar", en: "Copy" },
   "admin.open": { es: "Abrir", en: "Open" },

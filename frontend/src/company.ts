@@ -1,7 +1,7 @@
 // Datos de la empresa operadora. ⚠️ PLACEHOLDER — cambia por los datos REALES antes de publicar.
 // Todo lo legal (footer, términos, privacidad) lee de aquí, así se cambia en un solo sitio.
 export const COMPANY = {
-  nombre: "OC HOLDING GROUP LLC",
+  nombre: "OCA HOLDING GROUP LLC",
   // Dirección fiscal (CAMBIAR)
   direccion: "1234 Placeholder Ave, Suite 100, Miami, FL 33101, USA",
   pais: "Estados Unidos",

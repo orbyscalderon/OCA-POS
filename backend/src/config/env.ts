@@ -64,7 +64,7 @@ const schema = z.object({
   WHATSAPP_TEMPLATE: z.string().default(""),   // nombre de la plantilla aprobada en Meta
   WHATSAPP_LANG: z.string().default("es"),
   // Empresa operadora (para pies de email). CAMBIAR por los datos reales.
-  COMPANY_NAME: z.string().default("OC HOLDING GROUP LLC"),
+  COMPANY_NAME: z.string().default("OCA HOLDING GROUP LLC"),
   COMPANY_SUPPORT_EMAIL: z.string().default("soporte@turno.app"),
   // Login con Google (Google Identity Services). Vacío = botón de Google desactivado.
   GOOGLE_CLIENT_ID: z.string().default(""),

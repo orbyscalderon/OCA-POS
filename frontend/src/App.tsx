@@ -27,6 +27,11 @@ import { useEffect, useState } from "react";
 // de un solo rubro (su landing es la home, sin hub de soluciones).
 const RUBRO_FIJO = ((import.meta.env.VITE_RUBRO_FIJO as string | undefined) ?? "").trim();
 
+// App de escritorio (Electron): quien llega hasta acá ya activó una licencia para instalar
+// la app, así que no tiene sentido mostrarle la landing pública con precios/planes de
+// suscripción en la nube — va directo al login (que ya cubre login/registro/recuperar).
+const DESKTOP_MODE = ((import.meta.env.VITE_DESKTOP_MODE as string | undefined) ?? "").trim() === "true";
+
 // Al llegar desde una landing de rubro, abre el registro como DUEÑO DE NEGOCIO
 // con el rubro preseleccionado (no como cliente de belleza).
 function irARegistro(perfil: string) {
@@ -43,7 +48,7 @@ function Footer() {
   return (
     <footer className="container" style={{ textAlign: "center", paddingTop: 30, paddingBottom: 40 }}>
       <div className="faint small">
-        <a href="/terminos">{t("footer.terms")}</a> · <a href="/privacidad">{t("footer.privacy")}</a> · © {new Date().getFullYear()} OC POS
+        <a href="/terminos">{t("footer.terms")}</a> · <a href="/privacidad">{t("footer.privacy")}</a> · © {new Date().getFullYear()} OCA POS
       </div>
       <div className="faint small" style={{ marginTop: 4 }}>
         {t("footer.operatedBy")} <strong>{COMPANY.nombre}</strong> · {COMPANY.direccion}
@@ -58,7 +63,7 @@ function Footer() {
 function Header({ children }: { children?: React.ReactNode }) {
   return (
     <header className="app-header">
-      <div className="brand">OC<span>POS</span></div>
+      <div className="brand">OCA<span>POS</span></div>
       {children}
     </header>
   );
@@ -77,7 +82,7 @@ export default function App() {
   // En modo rubro fijo, la pestaña del navegador debe decir el nombre de ESE rubro,
   // no el título genérico multi-rubro que trae index.html por defecto.
   useEffect(() => {
-    if (RUBRO_FIJO && COPY[RUBRO_FIJO]) document.title = `OC POS — ${COPY[RUBRO_FIJO].titulo}`;
+    if (RUBRO_FIJO && COPY[RUBRO_FIJO]) document.title = `OCA POS — ${COPY[RUBRO_FIJO].titulo}`;
   }, []);
   // El superadmin puede alternar entre su panel, gestionar su propio negocio, o ver como cliente.
   const [modoSuper, setModoSuper] = useState<"panel" | "negocio" | "cliente">("panel");
@@ -140,6 +145,16 @@ export default function App() {
   }
 
   if (!usuario) {
+    // App de escritorio: sin landing pública ni precios, directo al login/registro local.
+    if (DESKTOP_MODE) {
+      return (
+        <>
+          <Header><LangToggle /></Header>
+          <Login />
+          <CookieConsent />
+        </>
+      );
+    }
     // Invitado: por defecto ve el marketplace público (estilo Fresha); reservar → login.
     if (authView === "login") {
       return (

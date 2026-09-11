@@ -1,4 +1,4 @@
-# OC POS
+# OCA POS
 
 SaaS B2B de gestión y punto de venta para MiPyMEs. **El rubro que elige el cliente al registrarse configura el sistema entero**: qué pantallas ve, qué campos tiene cada producto, qué roles existen y qué alertas se activan.
 

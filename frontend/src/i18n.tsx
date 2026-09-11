@@ -612,7 +612,7 @@ const dict = {
   "own.payoutsPending": { es: "Onboarding pendiente — pulsa para completar", en: "Onboarding pending — click to finish" },
   "own.splitTitle": { es: "Reparto de cada fianza", en: "How each deposit is split" },
   "own.splitBusiness": { es: "Tu negocio", en: "Your business" },
-  "own.splitPlatform": { es: "OC POS", en: "OC POS" },
+  "own.splitPlatform": { es: "OCA POS", en: "OCA POS" },
   "own.splitStripe": { es: "Comisión Stripe", en: "Stripe fee" },
   "own.settlement": { es: "Liquidación por empleado (este mes)", en: "Settlement by employee (this month)" },
   "own.settlementHelp": { es: "La fianza va a tu cuenta; aquí ves cuánto generó cada empleado para que le pagues su parte.", en: "Deposits go to your account; here you see how much each employee generated to pay them their share." },

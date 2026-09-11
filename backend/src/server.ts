@@ -8,7 +8,7 @@ import { iniciarJobRecordatorios, detenerJobRecordatorios } from "./jobs/recorda
 const app = crearApp();
 
 const server = app.listen(env.port, () => {
-  logger.info(`🟢 OC POS API en http://localhost:${env.port} | ${env.nodeEnv} | pago:${env.paymentProvider} | email:${env.emailTransport}`);
+  logger.info(`🟢 OCA POS API en http://localhost:${env.port} | ${env.nodeEnv} | pago:${env.paymentProvider} | email:${env.emailTransport}`);
 });
 
 // Jobs en segundo plano.

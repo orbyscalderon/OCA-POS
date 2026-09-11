@@ -3,7 +3,12 @@ import { api } from "../api";
 import { useT, type TKey } from "../i18n";
 import { Faq } from "./Faq";
 
-interface Plan { id: string; nombre: string; mensualUsd: number; anualUsd: number; anualPorMes: number; ahorroAnualUsd: number; maxNegocios: number; maxPeluqueros: number; }
+interface Plan {
+  id: string; nombre: string; tipo: "suscripcion" | "pago_unico";
+  mensualUsd?: number; anualUsd?: number; anualPorMes?: number; ahorroAnualUsd?: number;
+  precioUnicoUsd?: number;
+  maxNegocios: number; maxPeluqueros: number;
+}
 
 // Funciones que trae CUALQUIER plan pago (no varían entre Básico y Pro — lo único que
 // cambia es cuántos negocios y profesionales podés tener activos). Mostrarlas una sola
@@ -56,7 +61,7 @@ export function Precios({ onRegistrar }: { onRegistrar: () => void }) {
           <button className="ghost" style={{ width: "100%", marginTop: 10 }} onClick={onRegistrar}>{t("vl.startFree")}</button>
         </div>
 
-        {planes.map((p, i) => (
+        {planes.filter((p) => p.tipo === "suscripcion").map((p, i) => (
           <div className="card" key={p.id} style={{ display: "flex", flexDirection: "column", borderColor: i === 1 ? "var(--brand-500)" : undefined, boxShadow: i === 1 ? "var(--glow)" : undefined }}>
             <div className="row spread">
               <h2>{p.nombre}</h2>
@@ -75,6 +80,26 @@ export function Precios({ onRegistrar }: { onRegistrar: () => void }) {
               <li>{t("plan.upTo")} <strong style={{ color: "var(--text)" }}>{p.maxPeluqueros}</strong> {t("plan.prosLabel")}</li>
             </ul>
             <button className="primary" style={{ width: "100%", marginTop: 10 }} onClick={onRegistrar}>{t("pub.registerBiz")}</button>
+          </div>
+        ))}
+
+        {/* Licencia de por vida: pago único de la app de escritorio (no es suscripción de la nube). */}
+        {planes.filter((p) => p.tipo === "pago_unico").map((p) => (
+          <div className="card" key={p.id} style={{ display: "flex", flexDirection: "column", borderColor: "var(--brand-500)" }}>
+            <div className="row spread">
+              <h2>{t("precios.lifetimeTitle")}</h2>
+              <span className="badge">{t("precios.lifetimeBadge")}</span>
+            </div>
+            <div style={{ margin: "8px 0" }}>
+              <span style={{ fontSize: 34, fontWeight: 800 }}>${p.precioUnicoUsd}</span>
+              <span className="muted"> {t("precios.lifetimeOnce")}</span>
+            </div>
+            <p className="muted small" style={{ flex: 1 }}>{t("precios.lifetimeDesc")}</p>
+            <ul className="muted small" style={{ paddingLeft: 18, marginTop: 0 }}>
+              <li>{t("plan.upTo")} <strong style={{ color: "var(--text)" }}>{p.maxPeluqueros}</strong> {t("plan.prosLabel")}</li>
+              <li>{t("precios.lifetimeAddons")}</li>
+            </ul>
+            <button className="primary" style={{ width: "100%", marginTop: 10 }} onClick={onRegistrar}>{t("precios.lifetimeCta")}</button>
           </div>
         ))}
       </div>

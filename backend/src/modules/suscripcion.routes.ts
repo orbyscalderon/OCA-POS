@@ -18,6 +18,11 @@ export const PLANES = {
 type PlanId = keyof typeof PLANES;
 type Intervalo = "mensual" | "anual";
 
+// Licencia de la app de escritorio: pago único, de por vida (no es suscripción de la nube).
+// Cualquier función nueva que se agregue más adelante se cobra aparte y se desbloquea solo
+// en la licencia de quien la compró (ver Licencia.funcionesExtra).
+export const PLAN_VITALICIO = { nombre: "Vitalicio (app de escritorio)", precioUsd: 300 };
+
 async function assertDueno(negocioId: string, usuarioId: number) {
   const negocio = await prisma.negocio.findUnique({ where: { id: negocioId } });
   if (!negocio) throw NotFound("Negocio no encontrado");
@@ -30,20 +35,31 @@ suscripcionRouter.get(
   "/planes",
   asyncHandler(async (_req, res) => {
     res.json({
-      planes: (Object.keys(PLANES) as PlanId[]).map((id) => {
-        const p = PLANES[id];
-        return {
-          id,
-          nombre: p.nombre,
-          mensualUsd: p.mensualUsd,
-          anualUsd: p.anualUsd,
-          anualPorMes: Number((p.anualUsd / 12).toFixed(2)),
-          ahorroAnualUsd: p.mensualUsd * 12 - p.anualUsd, // 2 meses gratis
-          // Límites del plan (mostrados en las tarjetas).
-          maxNegocios: LIMITES_PLAN[id].negocios,
-          maxPeluqueros: LIMITES_PLAN[id].peluqueros,
-        };
-      }),
+      planes: [
+        ...(Object.keys(PLANES) as PlanId[]).map((id) => {
+          const p = PLANES[id];
+          return {
+            id,
+            nombre: p.nombre,
+            tipo: "suscripcion" as const,
+            mensualUsd: p.mensualUsd,
+            anualUsd: p.anualUsd,
+            anualPorMes: Number((p.anualUsd / 12).toFixed(2)),
+            ahorroAnualUsd: p.mensualUsd * 12 - p.anualUsd, // 2 meses gratis
+            // Límites del plan (mostrados en las tarjetas).
+            maxNegocios: LIMITES_PLAN[id].negocios,
+            maxPeluqueros: LIMITES_PLAN[id].peluqueros,
+          };
+        }),
+        {
+          id: "vitalicio" as const,
+          nombre: PLAN_VITALICIO.nombre,
+          tipo: "pago_unico" as const,
+          precioUnicoUsd: PLAN_VITALICIO.precioUsd,
+          maxNegocios: LIMITES_PLAN.pro.negocios,
+          maxPeluqueros: LIMITES_PLAN.pro.peluqueros,
+        },
+      ],
     });
   }),
 );

@@ -670,3 +670,27 @@ model AuditLog {
   @@index([accion])
   @@map("audit_logs")
 }
+
+// Licencia de la app de escritorio (Electron + Postgres embebido). Se compra/genera acá en
+// el backend de la nube y se activa una sola vez desde la PC del cliente: esta tabla guarda
+// el estado de esa activación, no las credenciales de uso diario (esas viven 100% locales en
+// cada instalación, en la base embebida de cada negocio).
+model Licencia {
+  id             String    @id @default(cuid())
+  clave          String    @unique @db.VarChar(40)
+  plan           String    @default("basico") @db.VarChar(20) // basico | pro | vitalicio
+  // Null = sin vencimiento (plan vitalicio, pago único). Con fecha = plan por suscripción.
+  vencimiento    DateTime?
+  // Funciones extra compradas aparte, solo desbloqueadas para ESTA licencia (no globales).
+  funcionesExtra String[]  @default([]) @map("funciones_extra")
+  // Huella de la instalación que activó la licencia (no es hardware real, ver electron/main.js).
+  // Null = todavía sin activar.
+  huellaMaquina  String?   @map("huella_maquina") @db.VarChar(100)
+  activadaEn     DateTime? @map("activada_en")
+  revocada       Boolean   @default(false)
+  negocioId      String?   @map("negocio_id") // negocio (cuenta de la nube) que la compró, si aplica
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([clave])
+  @@map("licencias")
+}

@@ -628,6 +628,8 @@ const dict = {
   // Home multi-rubro (PlatformHome)
   "pf.heroTitle": { es: "Gestiona cualquier negocio en una sola plataforma", en: "Manage any business on one platform" },
   "pf.heroSub": { es: "Punto de venta, inventario, reservas, préstamos, restaurante, granja y más. Eliges tu rubro y activamos solo lo que necesitas.", en: "Point of sale, inventory, bookings, loans, restaurants, farms and more. Pick your business type and we activate only what you need." },
+  "pf.plansTitle": { es: "Planes", en: "Plans" },
+  "pf.seeAllPlans": { es: "Ver todos los planes →", en: "See all plans →" },
   "pf.businessTitle": { es: "🏪 Para tu negocio", en: "🏪 For your business" },
   "pf.businessDesc": { es: "Digitaliza tu operación: ventas, stock, caja, clientes, cobros y más — según tu rubro.", en: "Digitize your operation: sales, stock, cash register, customers, payments and more — tailored to your business type." },
   "pf.businessCta": { es: "Ver soluciones", en: "See solutions" },
@@ -722,6 +724,18 @@ const dict = {
   "precios.trialPrice": { es: "para empezar", en: "to start" },
   "precios.trialDesc": { es: "Probá el sistema completo con tu rubro activado. Sin tarjeta de crédito.", en: "Try the full system with your business type activated. No credit card required." },
   "precios.mostChosen": { es: "★ Más elegido", en: "★ Most popular" },
+  "precios.lifetimeTitle": { es: "Vitalicio", en: "Lifetime" },
+  "precios.lifetimeBadge": { es: "Pago único", en: "One-time payment" },
+  "precios.lifetimeOnce": { es: "pago único", en: "one-time" },
+  "precios.lifetimeDesc": {
+    es: "Instalá OCA POS en tu PC. Pagás una vez y el sistema es tuyo de por vida, sin mensualidades.",
+    en: "Install OCA POS on your PC. Pay once and the system is yours for life, no monthly fees.",
+  },
+  "precios.lifetimeAddons": {
+    es: "Funciones nuevas que quieras sumar más adelante se cobran aparte, y quedan activadas solo en tu licencia.",
+    en: "New features you add later are billed separately, and unlock only on your license.",
+  },
+  "precios.lifetimeCta": { es: "Quiero la licencia vitalicia", en: "I want the lifetime license" },
   "precios.includedTitle": { es: "Incluido en Básico y Pro, sin costo extra", en: "Included in Basic and Pro, at no extra cost" },
   "precios.feat1": { es: "Punto de venta e inventario", en: "Point of sale and inventory" },
   "precios.feat2": { es: "Reservas y agenda online", en: "Online bookings and calendar" },

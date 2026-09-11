@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8" />
+<title>Activar OCA POS</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f1115; color: #e8e8ec; display: grid; place-items: center; height: 100vh; margin: 0; }
+  .card { width: 360px; background: #171a21; border: 1px solid #2a2e38; border-radius: 12px; padding: 28px; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  p.muted { color: #9aa0ab; font-size: 13px; margin: 0 0 18px; }
+  input { width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 8px; border: 1px solid #2a2e38; background: #0f1115; color: #e8e8ec; font-size: 15px; letter-spacing: 1px; text-transform: uppercase; }
+  button { width: 100%; margin-top: 12px; padding: 10px 12px; border-radius: 8px; border: none; background: #4f7cff; color: white; font-size: 15px; cursor: pointer; }
+  button:disabled { opacity: 0.6; cursor: default; }
+  .msg { margin-top: 12px; font-size: 13px; min-height: 18px; }
+  .msg.error { color: #ff6b6b; }
+  .msg.ok { color: #6bffb0; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Activar OCA POS</h1>
+    <p class="muted">Ingresá la clave de licencia que recibiste al comprar (necesitás internet solo para esta pantalla).</p>
+    <input id="clave" placeholder="OCAPOS-XXXX-XXXX-XXXX" autofocus />
+    <button id="btn">Activar</button>
+    <div id="msg" class="msg"></div>
+  </div>
+  <script>
+    const input = document.getElementById("clave");
+    const btn = document.getElementById("btn");
+    const msg = document.getElementById("msg");
+
+    async function activar() {
+      const clave = input.value.trim();
+      if (!clave) return;
+      btn.disabled = true;
+      msg.className = "msg";
+      msg.textContent = "Activando...";
+      const r = await window.ocapos.activar(clave);
+      if (r.ok) {
+        msg.className = "msg ok";
+        msg.textContent = "¡Listo! Abriendo OCA POS...";
+      } else {
+        btn.disabled = false;
+        msg.className = "msg error";
+        msg.textContent = r.error || "No se pudo activar. Revisá la clave e intentá de nuevo.";
+      }
+    }
+    btn.addEventListener("click", activar);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") activar(); });
+  </script>
+</body>
+</html>

@@ -79,6 +79,9 @@ const schema = z.object({
   // Carpeta del build del frontend (frontend/dist) a servir como estáticos + SPA fallback.
   // Vacío = no servir frontend (comportamiento actual, backend puro tipo API).
   FRONTEND_DIST_DIR: z.string().default(""),
+  // Clave PRIVADA (PEM, Ed25519) para firmar los certificados de licencia de la app de
+  // escritorio. Vive SOLO en el backend de la nube — nunca en el repo ni en la app instalada.
+  LICENSE_SIGNING_PRIVATE_KEY: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -172,4 +175,5 @@ export const env = {
   rubroFijo: e.RUBRO_FIJO,
   desktopMode: e.DESKTOP_MODE,
   frontendDistDir: e.FRONTEND_DIST_DIR || undefined,
+  licenseSigningPrivateKey: e.LICENSE_SIGNING_PRIVATE_KEY,
 } as const;

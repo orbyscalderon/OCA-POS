@@ -1,63 +1,46 @@
 import { useEffect, useState } from "react";
-import { api, type Perfil } from "../api";
-import { rubroTema } from "../rubroTema";
+import { api } from "../api";
 import { useT } from "../i18n";
 
-// Página principal de la plataforma (multi-rubro). No es específica de belleza.
-export function PlatformHome({ onNegocio, onReservar }: { onNegocio: () => void; onReservar: () => void }) {
+interface Plan {
+  id: string; nombre: string; tipo: "suscripcion" | "pago_unico";
+  mensualUsd?: number; precioUnicoUsd?: number;
+}
+
+// Portada pública: simple a propósito — un título, el botón de login, y los planes.
+// El resto (buscador, rubros, reservar) sigue disponible por sus propias rutas.
+export function PlatformHome({ onLogin }: { onLogin: () => void }) {
   const { t } = useT();
-  const [perfiles, setPerfiles] = useState<Perfil[]>([]);
-  useEffect(() => { api.get<{ perfiles: Perfil[] }>("/perfiles").then((r) => setPerfiles(r.perfiles)).catch(() => {}); }, []);
+  const [planes, setPlanes] = useState<Plan[]>([]);
+  useEffect(() => { api.get<{ planes: Plan[] }>("/suscripcion/planes").then((r) => setPlanes(r.planes)).catch(() => {}); }, []);
 
   return (
-    <div className="container" style={{ maxWidth: 960 }}>
+    <div className="container" style={{ maxWidth: 760 }}>
       <div className="mkt-hero">
         <h1 className="grad-text">{t("pf.heroTitle")}</h1>
         <p className="sub">{t("pf.heroSub")}</p>
+        <button className="primary" style={{ marginTop: 14, padding: "12px 28px", fontSize: 16 }} onClick={onLogin}>
+          {t("pub.signIn")}
+        </button>
       </div>
 
-      {/* Tres caminos: negocio, reservar un servicio, o buscar un producto */}
-      <div className="grid grid-2" style={{ marginTop: 4 }}>
-        <div className="card" style={{ borderColor: "var(--brand-500)" }}>
-          <h2 style={{ marginTop: 0 }}>{t("pf.businessTitle")}</h2>
-          <p className="muted">{t("pf.businessDesc")}</p>
-          <button className="primary" style={{ marginTop: 8 }} onClick={onNegocio}>{t("pf.businessCta")}</button>
-        </div>
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>{t("pf.bookTitle")}</h2>
-          <p className="muted">{t("pf.bookDesc")}</p>
-          <button className="ghost" style={{ marginTop: 8 }} onClick={onReservar}>{t("pf.bookCta")}</button>
-        </div>
-        <div className="card">
-          <h2 style={{ marginTop: 0 }}>{t("pf.searchTitle")}</h2>
-          <p className="muted">{t("pf.searchDesc")}</p>
-          <a href="/buscar"><button className="ghost" style={{ marginTop: 8 }}>{t("pf.searchCta")}</button></a>
-        </div>
-      </div>
-
-      {/* Verticales */}
-      <h2 style={{ marginTop: 30 }}>{t("pf.eachBusiness")}</h2>
-      <div className="mkt-grid">
-        {perfiles.map((p) => (
-          <a className="biz-card" key={p.slug} href={`/para/${p.slug}`} style={{ textDecoration: "none" }}>
-            <div className="biz-cover" style={{ background: rubroTema(p.slug).grad, display: "grid", placeItems: "center" }}>
-              <span style={{ fontSize: 40 }}>{p.emoji}</span>
+      <h2 style={{ textAlign: "center", marginTop: 36 }}>{t("pf.plansTitle")}</h2>
+      <div className="grid grid-2" style={{ alignItems: "stretch", marginTop: 10 }}>
+        {planes.map((p) => (
+          <div className="card" key={p.id} style={{ display: "flex", flexDirection: "column" }}>
+            <h3 style={{ marginTop: 0 }}>{p.tipo === "pago_unico" ? t("precios.lifetimeTitle") : p.nombre}</h3>
+            <div style={{ margin: "4px 0 10px" }}>
+              {p.tipo === "pago_unico" ? (
+                <><span style={{ fontSize: 26, fontWeight: 800 }}>${p.precioUnicoUsd}</span><span className="muted small"> {t("precios.lifetimeOnce")}</span></>
+              ) : (
+                <><span style={{ fontSize: 26, fontWeight: 800 }}>${p.mensualUsd}</span><span className="muted small">{t("own.perMonth")}</span></>
+              )}
             </div>
-            <div className="biz-body">
-              <h3>{p.nombre}</h3>
-              <div className="biz-meta">{p.descripcion}</div>
-            </div>
-          </a>
+            <button className="ghost" style={{ marginTop: "auto" }} onClick={onLogin}>{t("pub.signUp")}</button>
+          </div>
         ))}
       </div>
-
-      <div className="card" style={{ marginTop: 22 }}>
-        <div className="value-grid">
-          <div className="value-card"><span className="v-emoji">⚡</span><h3>{t("pf.value1t")}</h3><p className="muted small">{t("pf.value1d")}</p></div>
-          <div className="value-card"><span className="v-emoji">🔒</span><h3>{t("pf.value2t")}</h3><p className="muted small">{t("pf.value2d")}</p></div>
-          <div className="value-card"><span className="v-emoji">🧩</span><h3>{t("pf.value3t")}</h3><p className="muted small">{t("pf.value3d")}</p></div>
-        </div>
-      </div>
+      <p style={{ textAlign: "center", marginTop: 14 }}><a href="/precios">{t("pf.seeAllPlans")}</a></p>
     </div>
   );
 }

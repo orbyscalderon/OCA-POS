@@ -28,6 +28,7 @@ import { customersRouter } from "./modules/customers.routes.js";
 import { purchasingRouter } from "./modules/purchasing.routes.js";
 import { taxesRouter } from "./modules/taxes.routes.js";
 import { storefrontRouter } from "./modules/storefront.routes.js";
+import { licenciasRouter } from "./modules/licencias.routes.js";
 import { logger } from "./lib/logger.js";
 import pinoHttp from "pino-http";
 
@@ -54,6 +55,8 @@ export function crearApp() {
   });
   // Límite más estricto para auth (anti fuerza bruta).
   const authLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
+  // Igual de estricto para activar licencias (evita adivinar claves por fuerza bruta).
+  const licenciaLimiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 30 });
 
   // Captura el cuerpo crudo para verificar la firma del webhook de pagos (Stripe).
   // Límite de 1 MB para evitar payloads abusivos (las imágenes van por multipart, no JSON).
@@ -92,6 +95,7 @@ export function crearApp() {
   app.use("/api/impuestos", taxesRouter);
   app.use("/api/storefront", storefrontRouter);
   app.use("/api/suscripcion", suscripcionRouter);
+  app.use("/api/licencias", licenciaLimiter, licenciasRouter);
   app.use("/api/connect", connectRouter);
   app.use("/api/uploads", uploadsRouter);
   app.use("/api/superadmin", superadminRouter);

@@ -170,7 +170,7 @@ export default function App() {
           ? <VerticalLanding slug={RUBRO_FIJO} onRegistrar={irARegistro} onLogin={() => setAuthView("login")} />
           : path === "/reservas"
             ? <PublicLanding onReservar={() => setAuthView("login")} />
-            : <PlatformHome onNegocio={() => window.location.assign("/soluciones")} onReservar={() => window.location.assign("/reservas")} />}
+            : <PlatformHome onLogin={() => setAuthView("login")} />}
         <Footer /><CookieConsent />
       </>
     );

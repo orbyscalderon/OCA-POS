@@ -1,21 +1,27 @@
 // Proceso principal de Electron: levanta un Postgres embebido (PGlite), arranca el backend
 // real de OCA POS (backend/dist/server.js, sin ningún cambio de código) apuntando a esa base
 // local, y abre una ventana que carga el frontend servido por ese mismo backend.
-const { app, BrowserWindow } = require("electron");
+const { app, BrowserWindow, ipcMain } = require("electron");
 const path = require("node:path");
 const fs = require("node:fs");
 const crypto = require("node:crypto");
 const { spawn } = require("node:child_process");
 const { PGlite } = require("@electric-sql/pglite");
 const { PGLiteSocketServer } = require("@electric-sql/pglite-socket");
+const licencia = require("./licencia.js");
 
 const PG_PORT = 55432;
 const BACKEND_PORT = 4010;
+// URL del backend en la nube contra el que se activan las licencias. OJO: hay que confirmar
+// que coincida con el backend real desplegado antes de vender licencias — si no, la
+// activación siempre va a fallar.
+const CLOUD_API_URL = process.env.OCAPOS_LICENSE_API_URL || "https://turno-api.up.railway.app";
 
 const userDataDir = app.getPath("userData");
 const pgDataDir = path.join(userDataDir, "pgdata");
 const uploadsDir = path.join(userDataDir, "uploads");
 const secretFile = path.join(userDataDir, "secret.json");
+const huellaMaquina = licencia.getOrCreateMachineId(userDataDir);
 
 const isDev = !app.isPackaged;
 const backendServerPath = isDev
@@ -124,12 +130,76 @@ function createWindow() {
   mainWindow.loadURL(`http://127.0.0.1:${BACKEND_PORT}`);
 }
 
+// Llama al backend de la nube para activar/revalidar la licencia. Solo hace falta internet
+// para esta llamada puntual — el resultado firmado queda guardado localmente y desde ahí
+// la app arranca offline (ver licencia.cargarLicenciaValida).
+async function activarContraNube(clave) {
+  const res = await fetch(`${CLOUD_API_URL}/api/licencias/activar`, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ clave, huellaMaquina }),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, error: data?.error || "No se pudo activar la licencia" };
+  return licencia.guardarSiValido(userDataDir, data, huellaMaquina);
+}
+
+ipcMain.handle("activar-licencia", async (_e, clave) => {
+  try {
+    return await activarContraNube(String(clave || "").trim());
+  } catch (err) {
+    return { ok: false, error: "Sin conexión con el servidor de licencias. Probá de nuevo." };
+  }
+});
+
+// Revalidación en segundo plano, sin bloquear el arranque: si el negocio renovó, o le
+// agregaron una función paga nueva, o cambió el vencimiento, esto lo actualiza la próxima
+// vez que haya internet. Si falla (sin conexión), no pasa nada — se sigue usando lo cacheado.
+function revalidarEnSegundoPlano(clave) {
+  activarContraNube(clave).catch(() => {});
+}
+
+// Ventana de activación: se muestra sola, bloqueando el resto del arranque, hasta que el
+// usuario ingresa una clave válida.
+function mostrarActivacion() {
+  return new Promise((resolve, reject) => {
+    const win = new BrowserWindow({
+      width: 420,
+      height: 320,
+      resizable: false,
+      autoHideMenuBar: true,
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        preload: path.join(__dirname, "preload-activation.js"),
+      },
+    });
+    win.loadFile(path.join(__dirname, "activation.html"));
+    win.on("closed", () => reject(new Error("Activación cancelada")));
+
+    const revisar = setInterval(() => {
+      const valida = licencia.cargarLicenciaValida(userDataDir, huellaMaquina);
+      if (valida) {
+        clearInterval(revisar);
+        win.removeAllListeners("closed");
+        win.close();
+        resolve(valida);
+      }
+    }, 400);
+  });
+}
+
 app.whenReady().then(async () => {
   try {
+    let licenciaValida = licencia.cargarLicenciaValida(userDataDir, huellaMaquina);
+    if (!licenciaValida) {
+      licenciaValida = await mostrarActivacion();
+    }
     await startEmbeddedPostgres();
     startBackend();
     await esperarBackend();
     createWindow();
+    revalidarEnSegundoPlano(licenciaValida.clave);
   } catch (err) {
     console.error("[oca-pos] Error al iniciar la app:", err);
     app.quit();

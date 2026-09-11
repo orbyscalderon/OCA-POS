@@ -35,6 +35,12 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  // Líquido elegido esperando que el cajero indique cuántos ml se lleva el cliente (el tamaño
+  // del tanque varía por cliente: pod de 2ml, tanque de 4ml, 6ml...). precioVenta del líquido
+  // es el valor del pote COMPLETO (ej. $900 el pote de 100ml) — el precio por ml y el de la
+  // recarga se calculan solos a partir de eso, no hace falta cargarlos a mano cada vez.
+  const [recargaPendiente, setRecargaPendiente] = useState<Producto | null>(null);
+  const [mlRecarga, setMlRecarga] = useState("");
 
   // Búsqueda de cliente para fiar la venta (solo si el rubro tiene el módulo de crédito).
   useEffect(() => {
@@ -56,13 +62,42 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
     return () => clearTimeout(t2);
   }, [busqueda, negocio.id]);
 
-  function agregar(p: Producto) {
+function agregar(p: Producto) {
+    // Un líquido con volumen (ml) no se vende "1 unidad = el pote entero": se pregunta cuántos
+    // ml se lleva el cliente y se calcula el precio proporcional al pote.
+    if (p.volumenMl != null && num(p.volumenMl) > 0) {
+      setRecargaPendiente(p); setMlRecarga(""); setBusqueda(""); setResultados([]);
+      return;
+    }
     setCarrito((c) => {
       const i = c.findIndex((l) => l.productoId === p.id);
       if (i >= 0) { const cp = [...c]; cp[i] = { ...cp[i], cantidad: cp[i].cantidad + 1 }; return cp; }
       return [...c, { productoId: p.id, nombre: p.nombre, cantidad: 1, precioUnit: num(p.precioVenta), impuestoPct: num(p.impuestoPct) }];
     });
     setBusqueda(""); setResultados([]); inputRef.current?.focus();
+  }
+
+  // Precio por ml del pote (valor total del pote / sus ml), y precio de la recarga según los
+  // ml que pida el cajero para ESTE cliente puntual.
+  function precioPorMl(p: Producto): number {
+    const vol = num(p.volumenMl);
+    return vol > 0 ? num(p.precioVenta) / vol : 0;
+  }
+
+  function confirmarRecarga() {
+    if (!recargaPendiente) return;
+    const ml = Number(mlRecarga);
+    if (!ml || ml <= 0) return;
+    const p = recargaPendiente;
+    const precioUnit = precioPorMl(p);
+    setCarrito((c) => [...c, {
+      productoId: p.id,
+      nombre: `${p.nombre} (${ml} ml)`,
+      cantidad: ml,
+      precioUnit,
+      impuestoPct: num(p.impuestoPct),
+    }]);
+    setRecargaPendiente(null); setMlRecarga(""); inputRef.current?.focus();
   }
 
   function setCant(i: number, cantidad: number) {
@@ -112,12 +147,48 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
         onChange={(e) => setBusqueda(e.target.value)} onKeyDown={onEnter} autoFocus />
       {resultados.length > 0 && (
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 220, overflowY: "auto" }}>
-          {resultados.map((p) => (
-            <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => agregar(p)}>
-              <div><strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br /><span className="muted small">{t("pos.stock")}: {num(p.stock)} {p.unidad}</span></div>
-              <strong>{money(p.precioVenta)}</strong>
-            </div>
-          ))}
+          {resultados.map((p) => {
+            const esLiquido = p.volumenMl != null && num(p.volumenMl) > 0;
+            return (
+              <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => agregar(p)}>
+                <div>
+                  <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br />
+                  <span className="muted small">
+                    {esLiquido
+                      ? `${t("pos.stock")}: ${num(p.stock)} ml · ${money(precioPorMl(p))}/ml`
+                      : `${t("pos.stock")}: ${num(p.stock)} ${p.unidad}`}
+                  </span>
+                </div>
+                <strong>{esLiquido ? t("pos.refillCta") : money(p.precioVenta)}</strong>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {recargaPendiente && (
+        <div className="card" style={{ background: "var(--surface-2)", marginTop: 6 }}>
+          <h3 style={{ marginTop: 0 }}>{t("pos.refillTitle")} {recargaPendiente.nombre}</h3>
+          <p className="muted small">
+            {t("pos.refillStock")}: {num(recargaPendiente.stock)} ml · {money(precioPorMl(recargaPendiente))}/ml
+          </p>
+          <label>{t("pos.refillMl")}</label>
+          <input
+            type="number" min="0" step="0.1" autoFocus value={mlRecarga}
+            onChange={(e) => setMlRecarga(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && confirmarRecarga()}
+            placeholder="4"
+          />
+          {mlRecarga && Number(mlRecarga) > 0 && (
+            <p className="small" style={{ marginTop: 6 }}>
+              {t("pos.refillPrice")}: <strong>{money(Number(mlRecarga) * precioPorMl(recargaPendiente))}</strong>
+              {Number(mlRecarga) > num(recargaPendiente.stock) && <span className="error"> · {t("pos.refillNotEnough")}</span>}
+            </p>
+          )}
+          <div className="row" style={{ marginTop: 8 }}>
+            <button className="primary" disabled={!mlRecarga || Number(mlRecarga) <= 0} onClick={confirmarRecarga}>{t("pos.refillAdd")}</button>
+            <button className="ghost" onClick={() => { setRecargaPendiente(null); setMlRecarga(""); }}>{t("common.cancel")}</button>
+          </div>
         </div>
       )}
 

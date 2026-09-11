@@ -16,7 +16,7 @@ import { PublicLanding } from "./components/PublicLanding";
 import { Precios } from "./components/Precios";
 import { Storefront } from "./components/Storefront";
 import { Soluciones } from "./components/Soluciones";
-import { VerticalLanding } from "./components/VerticalLanding";
+import { VerticalLanding, COPY } from "./components/VerticalLanding";
 import { PlatformHome } from "./components/PlatformHome";
 import { Buscador } from "./components/Buscador";
 import { COMPANY } from "./company";
@@ -42,7 +42,7 @@ function Footer() {
   return (
     <footer className="container" style={{ textAlign: "center", paddingTop: 30, paddingBottom: 40 }}>
       <div className="faint small">
-        <a href="/terminos">Términos</a> · <a href="/privacidad">Privacidad</a> · © {new Date().getFullYear()} Turno
+        <a href="/terminos">Términos</a> · <a href="/privacidad">Privacidad</a> · © {new Date().getFullYear()} OC POS
       </div>
       <div className="faint small" style={{ marginTop: 4 }}>
         Operado por <strong>{COMPANY.nombre}</strong> · {COMPANY.direccion}
@@ -57,7 +57,7 @@ function Footer() {
 function Header({ children }: { children?: React.ReactNode }) {
   return (
     <header className="app-header">
-      <div className="brand">Tur<span>no</span></div>
+      <div className="brand">OC<span>POS</span></div>
       {children}
     </header>
   );
@@ -72,6 +72,11 @@ export default function App() {
   // Si venimos de una landing de rubro, abrimos directo el registro.
   useEffect(() => {
     try { if (localStorage.getItem("turno_signup")) { setAuthView("login"); localStorage.removeItem("turno_signup"); } } catch { /* ignore */ }
+  }, []);
+  // En modo rubro fijo, la pestaña del navegador debe decir el nombre de ESE rubro,
+  // no el título genérico multi-rubro que trae index.html por defecto.
+  useEffect(() => {
+    if (RUBRO_FIJO && COPY[RUBRO_FIJO]) document.title = `OC POS — ${COPY[RUBRO_FIJO].titulo}`;
   }, []);
   // El superadmin puede alternar entre su panel, gestionar su propio negocio, o ver como cliente.
   const [modoSuper, setModoSuper] = useState<"panel" | "negocio" | "cliente">("panel");

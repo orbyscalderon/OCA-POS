@@ -1,11 +1,12 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { Forbidden, NotFound } from "../lib/errors.js";
+import { BadRequest, Forbidden, NotFound } from "../lib/errors.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 
 export const customersRouter = Router();
+const round2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
 
 async function assertDueno(negocioId: string, userId: number, rol: string) {
   if (rol === "superadmin") return;
@@ -50,6 +51,26 @@ customersRouter.post("/:id/puntos", requireAuth, requireRole("admin_negocio"), a
   await assertDueno(c.negocioId, req.user!.sub, req.user!.rol);
   const puntos = Math.max(0, c.puntos + delta);
   const cliente = await prisma.clienteNegocio.update({ where: { id: req.params.id }, data: { puntos } });
+  res.json({ cliente });
+}));
+
+// Fiado: registra un pago (abono) del cliente contra su saldo pendiente.
+customersRouter.post("/:id/pagos", requireAuth, requireRole("admin_negocio"), asyncHandler(async (req, res) => {
+  const { monto } = z.object({ monto: z.coerce.number().positive() }).parse(req.body);
+  const c = await prisma.clienteNegocio.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
+  if (!c) throw NotFound("Cliente no encontrado");
+  await assertDueno(c.negocioId, req.user!.sub, req.user!.rol);
+
+  const cliente = await prisma.$transaction(async (tx) => {
+    // Bloquea la fila del cliente: dos cobros simultáneos no deben pisarse ni dejar
+    // el saldo negativo por una condición de carrera.
+    const [actual] = await tx.$queryRaw<{ saldo_fiado: string }[]>`SELECT saldo_fiado FROM "clientes_negocio" WHERE id = ${req.params.id} FOR UPDATE`;
+    const saldoActual = Number(actual.saldo_fiado);
+    if (monto > saldoActual + 0.01) {
+      throw BadRequest(`El pago (${monto}) supera el saldo pendiente (${saldoActual})`, "PAGO_EXCEDE_SALDO");
+    }
+    return tx.clienteNegocio.update({ where: { id: req.params.id }, data: { saldoFiado: round2(saldoActual - monto) } });
+  });
   res.json({ cliente });
 }));
 

@@ -11,6 +11,9 @@ const TEMAS: Record<string, RubroTema> = {
   farmacia:       { grad: "linear-gradient(135deg,#06b6d4,#0e7490)", accent: "#06b6d4" },
   granja_avicola: { grad: "linear-gradient(135deg,#84cc16,#3f6212)", accent: "#84cc16" },
   prestamista:    { grad: "linear-gradient(135deg,#d4af37,#5b3a10)", accent: "#d4af37" },
+  panaderia:      { grad: "linear-gradient(135deg,#d97706,#78350f)", accent: "#d97706" },
+  moda:           { grad: "linear-gradient(135deg,#ec4899,#701a4d)", accent: "#ec4899" },
+  veterinaria:    { grad: "linear-gradient(135deg,#0ea5e9,#0c4a6e)", accent: "#0ea5e9" },
 };
 
 export function rubroTema(slug: string): RubroTema {

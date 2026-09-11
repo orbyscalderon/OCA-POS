@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
 
 // Módulo CLIENTES (CRM básico del negocio).
-interface Cliente { id: string; nombre: string; telefono: string | null; email: string | null; direccion: string | null; notas: string | null; puntos: number }
+interface Cliente { id: string; nombre: string; telefono: string | null; email: string | null; direccion: string | null; notas: string | null; puntos: number; saldoFiado: string | number }
+const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 
-export function ClientesView({ negocio, loyalty = false }: { negocio: Negocio; loyalty?: boolean }) {
+export function ClientesView({ negocio, loyalty = false, credit = false }: { negocio: Negocio; loyalty?: boolean; credit?: boolean }) {
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [q, setQ] = useState("");
   const [nuevo, setNuevo] = useState(false);
@@ -22,6 +23,14 @@ export function ClientesView({ negocio, loyalty = false }: { negocio: Negocio; l
     catch (err) { setError(err instanceof ApiError ? err.message : "Error"); }
   }
   async function puntos(id: string, delta: number) { await api.post(`/clientes/${id}/puntos`, { delta }); cargar(); }
+
+  async function cobrar(c: Cliente) {
+    const saldo = Number(c.saldoFiado);
+    const v = prompt(`Cobrar a "${c.nombre}" (debe ${money(saldo)}):`, saldo.toFixed(2));
+    if (!v) return;
+    try { await api.post(`/clientes/${c.id}/pagos`, { monto: Number(v) }); cargar(); }
+    catch (err) { alert(err instanceof ApiError ? err.message : "Error al cobrar"); }
+  }
 
   return (
     <div className="card">
@@ -44,18 +53,25 @@ export function ClientesView({ negocio, loyalty = false }: { negocio: Negocio; l
         </form>
       )}
       <input placeholder="Buscar por nombre o teléfono…" value={q} onChange={(e) => setQ(e.target.value)} style={{ marginTop: 10 }} />
-      {clientes.map((c) => (
-        <div className="list-item" key={c.id}>
-          <div><strong>{c.nombre}</strong><br /><span className="muted small">{[c.telefono, c.email, c.direccion].filter(Boolean).join(" · ") || "—"}</span></div>
-          {loyalty && (
+      {clientes.map((c) => {
+        const debe = Number(c.saldoFiado) > 0;
+        return (
+          <div className="list-item" key={c.id}>
+            <div><strong>{c.nombre}</strong><br /><span className="muted small">{[c.telefono, c.email, c.direccion].filter(Boolean).join(" · ") || "—"}</span></div>
             <div className="row" style={{ alignItems: "center", gap: 6 }}>
-              <span className="badge ok">⭐ {c.puntos}</span>
-              <button className="ghost small" onClick={() => puntos(c.id, 1)}>+1</button>
-              <button className="ghost small" onClick={() => puntos(c.id, -1)}>−1</button>
+              {credit && debe && <span className="badge err">Debe {money(c.saldoFiado)}</span>}
+              {credit && debe && <button className="ghost small" onClick={() => cobrar(c)}>Cobrar</button>}
+              {loyalty && (
+                <>
+                  <span className="badge ok">⭐ {c.puntos}</span>
+                  <button className="ghost small" onClick={() => puntos(c.id, 1)}>+1</button>
+                  <button className="ghost small" onClick={() => puntos(c.id, -1)}>−1</button>
+                </>
+              )}
             </div>
-          )}
-        </div>
-      ))}
+          </div>
+        );
+      })}
       {clientes.length === 0 && <p className="muted small" style={{ marginTop: 8 }}>Sin clientes.</p>}
     </div>
   );

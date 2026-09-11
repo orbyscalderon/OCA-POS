@@ -161,7 +161,7 @@ export default function App() {
           </div>
         </Header>
         {RUBRO_FIJO
-          ? <VerticalLanding slug={RUBRO_FIJO} onRegistrar={irARegistro} />
+          ? <VerticalLanding slug={RUBRO_FIJO} onRegistrar={irARegistro} onLogin={() => setAuthView("login")} />
           : path === "/reservas"
             ? <PublicLanding onReservar={() => setAuthView("login")} />
             : <PlatformHome onNegocio={() => window.location.assign("/soluciones")} onReservar={() => window.location.assign("/reservas")} />}

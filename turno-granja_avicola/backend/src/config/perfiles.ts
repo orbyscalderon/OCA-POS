@@ -39,6 +39,15 @@ export const PERFILES: Perfil[] = [
   { slug: "prestamista", nombre: "Prestamista / Financiera", categoria: "financiero", emoji: "💵", modoPrimario: "lending",
     descripcion: "Préstamos con cronograma, interés, mora y cobranza en ruta. El producto es el dinero.",
     modulos: ["lending", "credit", "customers", "pos", "expenses", "cash", "taxes", "employees"] },
+  { slug: "panaderia", nombre: "Panadería / Repostería", categoria: "alimentos", emoji: "🥖", modoPrimario: "quick_pos",
+    descripcion: "Producción diaria de pan y repostería con vida útil corta y encargos personalizados.",
+    modulos: ["pos", "inventory", "credit", "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront", "employees"] },
+  { slug: "moda", nombre: "Ropa y Calzado", categoria: "retail", emoji: "👕", modoPrimario: "variant_inventory",
+    descripcion: "Boutique de ropa y calzado con variantes por talla y color, y apartado sin cronograma.",
+    modulos: ["pos", "inventory", "credit", "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront", "employees"] },
+  { slug: "veterinaria", nombre: "Veterinaria / Pet Shop", categoria: "servicios", emoji: "🐾", modoPrimario: "appointments",
+    descripcion: "Consultas, vacunación y estética por agenda, más venta de alimento y accesorios.",
+    modulos: ["appointments", "service_orders", "employees", "pos", "inventory", "credit", "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront"] },
 ];
 
 // Etiquetas legibles de cada módulo.
@@ -61,8 +70,14 @@ export const MODULO_LABELS: Record<string, string> = {
   agro: "Producción agro",
 };
 
-// Módulos ya funcionales en la plataforma hoy (el resto llega por roadmap del motor de nicho).
-export const MODULOS_DISPONIBLES = ["appointments", "employees", "customers"];
+// Módulos ya funcionales en la plataforma hoy (con ruta de backend real, no solo el manifiesto
+// del motor de nicho). Esta lista se había quedado desactualizada — decía que solo 3 de 16
+// módulos existían cuando en realidad ya están todos implementados en backend/src/modules/.
+export const MODULOS_DISPONIBLES = [
+  "appointments", "service_orders", "tables", "pos", "inventory", "credit", "lending",
+  "customers", "loyalty", "purchasing", "expenses", "cash", "taxes", "storefront",
+  "employees", "agro",
+];
 
 export function getPerfil(slug: string | null | undefined): Perfil | undefined {
   if (!slug) return undefined;

@@ -3,6 +3,26 @@ import { useAuth } from "../auth";
 import { api, ApiError } from "../api";
 import { useT } from "../i18n";
 import { GoogleButton } from "./GoogleButton";
+import { COPY } from "./VerticalLanding";
+import { rubroTema } from "../rubroTema";
+
+// Modo "rubro fijo": si este deploy es un producto de un solo rubro, el login debe
+// mostrar SU identidad (emoji, título) en vez del mensaje genérico de reservas de belleza.
+const RUBRO_FIJO = ((import.meta.env.VITE_RUBRO_FIJO as string | undefined) ?? "").trim();
+const EMOJIS_RUBRO: Record<string, string[]> = {
+  barberia: ["💈", "✂️", "💇", "🪒", "✨"],
+  taller: ["🔧", "🚗", "🛠️", "⚙️", "🔩"],
+  restaurante: ["🍽️", "🍴", "👨‍🍳", "🍹", "🔥"],
+  supermercado: ["🛒", "🧺", "🥫", "🍞", "🥛"],
+  ferreteria: ["🔨", "🔩", "🧱", "🪜", "🧰"],
+  vape_shop: ["💨", "☁️", "🔋", "🍓", "🌀"],
+  farmacia: ["💊", "🩺", "⚕️", "🌡️", "🧴"],
+  granja_avicola: ["🐔", "🥚", "🌾", "🐣", "📦"],
+  prestamista: ["💵", "📊", "🤝", "📆", "💳"],
+  panaderia: ["🥖", "🥐", "🍰", "🍞", "🧁"],
+  moda: ["👕", "👗", "👟", "👜", "🧢"],
+  veterinaria: ["🐾", "🐶", "🐱", "💉", "🦴"],
+};
 
 export function Login() {
   const { login, loginGoogle, registro } = useAuth();
@@ -62,21 +82,26 @@ export function Login() {
   }
 
   const titulo = modo === "login" ? t("login.title") : modo === "registro" ? t("login.register") : t("login.recover");
+  // Con rubro fijo, esta pantalla es LA puerta de entrada de ese producto: debe
+  // sentirse suya, no la de una plataforma multi-rubro de reservas de belleza.
+  const copyRubro = RUBRO_FIJO ? COPY[RUBRO_FIJO] : null;
+  const emojisRubro = RUBRO_FIJO ? (EMOJIS_RUBRO[RUBRO_FIJO] ?? ["🏪", "✨", "📦", "💳", "✅"]) : ["💇", "💅", "🧖", "💆", "✨"];
+  const accent = RUBRO_FIJO ? rubroTema(RUBRO_FIJO).accent : undefined;
 
   return (
     <div className="login-wrap">
       <div className="container" style={{ maxWidth: 440, position: "relative" }}>
-        {/* Cabecera de bienvenida — emojis multi-rubro (no solo barbería) */}
+        {/* Cabecera de bienvenida: identidad del rubro fijo, o genérica multi-rubro */}
         <div style={{ textAlign: "center", marginBottom: 22 }}>
           <div style={{ display: "flex", gap: 10, justifyContent: "center", fontSize: 34, lineHeight: 1 }}>
-            {["💇", "💅", "🧖", "💆", "✨"].map((e, i) => (
+            {emojisRubro.map((e, i) => (
               <span key={e} className="float-emoji" style={{ animationDelay: `${i * 0.25}s` }}>{e}</span>
             ))}
           </div>
           <h1 className="grad-text" style={{ fontSize: 38, marginTop: 16 }}>
-            {t("mkt.heroTitle")}
+            {copyRubro?.titulo ?? t("mkt.heroTitle")}
           </h1>
-          <p className="muted" style={{ maxWidth: 380, margin: "8px auto 0" }}>{t("brand.tagline")}</p>
+          <p className="muted" style={{ maxWidth: 380, margin: "8px auto 0" }}>{copyRubro?.sub ?? t("brand.tagline")}</p>
         </div>
 
         <div className="card glass-card pop">
@@ -115,7 +140,12 @@ export function Login() {
             {error && <p className="error">{error}</p>}
             {aviso && <p className="success">{aviso}</p>}
 
-            <button className="primary" type="submit" disabled={cargando} style={{ width: "100%", marginTop: 18 }}>
+            <button
+              className="primary"
+              type="submit"
+              disabled={cargando}
+              style={{ width: "100%", marginTop: 18, ...(accent ? { background: accent, borderColor: accent } : {}) }}
+            >
               {cargando ? "..." : modo === "login" ? t("login.enter") : modo === "registro" ? t("login.doRegister") : t("login.sendLink")}
             </button>
           </form>

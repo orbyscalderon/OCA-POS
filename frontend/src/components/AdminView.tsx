@@ -77,12 +77,16 @@ function CrearNegocio({ onCreado }: { onCreado: () => void }) {
     api.get<{ perfiles: Perfil[]; moduloLabels: Record<string, string>; modulosDisponibles: string[] }>("/perfiles")
       .then((r) => {
         setPerfiles(r.perfiles); setModuloLabels(r.moduloLabels); setDisponibles(r.modulosDisponibles);
-        if (r.perfiles.length === 1) setPerfilSel((s) => s || r.perfiles[0].slug);
+        const listos = r.perfiles.filter((p) => p.modulos.every((m) => r.modulosDisponibles.includes(m)));
+        if (listos.length === 1) setPerfilSel((s) => s || listos[0].slug);
       })
       .catch(() => {});
   }, []);
 
-  const perfilObj = perfiles.find((p) => p.slug === perfilSel);
+  // Solo se puede elegir un rubro con TODOS sus módulos ya funcionando: no tiene sentido
+  // dejar crear un negocio que después muestre secciones a medio construir.
+  const perfilesListos = perfiles.filter((p) => p.modulos.every((m) => disponibles.includes(m)));
+  const perfilObj = perfilesListos.find((p) => p.slug === perfilSel);
 
   function usarUbicacion() {
     if (!navigator.geolocation) return;
@@ -117,7 +121,7 @@ function CrearNegocio({ onCreado }: { onCreado: () => void }) {
       <label>{t("own.whatBusiness")}</label>
       <p className="muted small" style={{ margin: "0 0 10px" }}>{t("own.whatBusinessHelp")}</p>
       <div className="rubro-grid">
-        {perfiles.map((p) => (
+        {perfilesListos.map((p) => (
           <button
             type="button"
             key={p.slug}
@@ -285,13 +289,13 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver: () =
         dueño únicamente en el backend — mostrarlos a personal daría una pantalla que solo
         falla al guardar, así que quedan reservados a "esDueno" hasta que se refuerce cada uno.
       */}
-      {modulos.includes("pos") && (puedeNegocio(miRol, "pos") || puedeNegocio(miRol, "inventario")) && <ComercioView negocio={negocio} miRol={miRol} />}
+      {modulos.includes("pos") && (puedeNegocio(miRol, "pos") || puedeNegocio(miRol, "inventario")) && <ComercioView negocio={negocio} miRol={miRol} credit={modulos.includes("credit")} />}
       {modulos.includes("agro") && puedeNegocio(miRol, "agro") && <AgroView negocio={negocio} miRol={miRol} />}
       {esDueno && modulos.includes("lending") && <PrestamosView negocio={negocio} />}
       {esDueno && modulos.includes("tables") && <MesasView negocio={negocio} />}
       {esDueno && modulos.includes("service_orders") && <ServiceOrdersView negocio={negocio} />}
       {esDueno && modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
-      {esDueno && modulos.includes("customers") && <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} />}
+      {esDueno && modulos.includes("customers") && <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} credit={modulos.includes("credit")} />}
       {esDueno && modulos.includes("expenses") && <GastosView negocio={negocio} />}
       {esDueno && modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}
       {modulos.includes("storefront") && esAdmin && <TiendaLink slug={negocio.slug} />}

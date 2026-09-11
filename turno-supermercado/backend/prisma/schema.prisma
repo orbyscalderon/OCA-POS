@@ -205,7 +205,11 @@ model ClienteNegocio {
   notas     String?  @db.VarChar(300)
   // Fidelización: puntos/sellos acumulados (módulo loyalty).
   puntos    Int      @default(0)
+  // Fiado / crédito abierto (módulo credit): cuánto le debe este cliente al negocio.
+  saldoFiado Decimal @default(0) @map("saldo_fiado") @db.Decimal(12, 2)
   createdAt DateTime @default(now()) @map("created_at")
+
+  ventas Venta[]
 
   @@index([negocioId])
   @@map("clientes_negocio")
@@ -388,11 +392,15 @@ model Venta {
   metodoPago   String      @default("efectivo") @map("metodo_pago") @db.VarChar(20)
   sesionCajaId String?     @map("sesion_caja_id")
   sesionCaja   SesionCaja? @relation(fields: [sesionCajaId], references: [id])
+  // Cliente al que se le fía esta venta (obligatorio cuando metodoPago = "fiado").
+  clienteId    String?         @map("cliente_id")
+  cliente      ClienteNegocio? @relation(fields: [clienteId], references: [id])
   createdAt    DateTime    @default(now()) @map("created_at")
 
   lineas LineaVenta[]
 
   @@index([negocioId])
+  @@index([clienteId])
   @@map("ventas")
 }
 

@@ -13,7 +13,7 @@ interface Venta { id: string; total: string | number; metodoPago: string; create
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
 
-export function ComercioView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNegocio }) {
+export function ComercioView({ negocio, miRol, credit = false }: { negocio: Negocio; miRol?: RolNegocio; credit?: boolean }) {
   const vePos = puedeNegocio(miRol, "pos");
   const veInventario = puedeNegocio(miRol, "inventario");
   const veCaja = puedeNegocio(miRol, "caja");
@@ -26,7 +26,7 @@ export function ComercioView({ negocio, miRol }: { negocio: Negocio; miRol?: Rol
         {veInventario && <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>Productos</button>}
         {veCaja && <button className={`tab ${tab === "caja" ? "active" : ""}`} onClick={() => setTab("caja")}>Caja</button>}
       </div>
-      {tab === "vender" && vePos && <Vender negocio={negocio} />}
+      {tab === "vender" && vePos && <Vender negocio={negocio} credit={credit} />}
       {tab === "productos" && veInventario && <Productos negocio={negocio} />}
       {tab === "caja" && veCaja && <Caja negocio={negocio} />}
     </div>
@@ -35,15 +35,29 @@ export function ComercioView({ negocio, miRol }: { negocio: Negocio; miRol?: Rol
 
 // ---------- VENDER (POS) ----------
 interface LineaCarrito { productoId?: string; nombre: string; cantidad: number; precioUnit: number; impuestoPct: number }
+interface ClienteLite { id: string; nombre: string; telefono: string | null; saldoFiado: string | number }
 
-function Vender({ negocio }: { negocio: Negocio }) {
+function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<Producto[]>([]);
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [metodoPago, setMetodoPago] = useState("efectivo");
+  const [clienteQ, setClienteQ] = useState("");
+  const [clienteResultados, setClienteResultados] = useState<ClienteLite[]>([]);
+  const [clienteSel, setClienteSel] = useState<ClienteLite | null>(null);
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Búsqueda de cliente para fiar la venta (solo si el rubro tiene el módulo de crédito).
+  useEffect(() => {
+    if (!credit || metodoPago !== "fiado" || !clienteQ.trim()) { setClienteResultados([]); return; }
+    const t = setTimeout(() => {
+      api.get<{ clientes: ClienteLite[] }>(`/clientes?negocioId=${negocio.id}&q=${encodeURIComponent(clienteQ)}`)
+        .then((r) => setClienteResultados(r.clientes)).catch(() => {});
+    }, 200);
+    return () => clearTimeout(t);
+  }, [credit, metodoPago, clienteQ, negocio.id]);
 
   // Busca productos por nombre o código de barras (un escáner escribe el código + Enter).
   useEffect(() => {
@@ -80,10 +94,11 @@ function Vender({ negocio }: { negocio: Negocio }) {
   async function cobrar() {
     setError(""); setMsg("");
     if (carrito.length === 0) return;
+    if (metodoPago === "fiado" && !clienteSel) { setError("Elige a qué cliente se le fía la venta."); return; }
     try {
-      await api.post("/pos/ventas", { negocioId: negocio.id, metodoPago, lineas: carrito });
+      await api.post("/pos/ventas", { negocioId: negocio.id, metodoPago, clienteId: clienteSel?.id, lineas: carrito });
       setMsg(`Venta registrada: ${money(total)}`);
-      setCarrito([]);
+      setCarrito([]); setClienteSel(null); setClienteQ("");
     } catch (err) {
       setError(err instanceof ApiError ? err.message : "Error al cobrar");
     }
@@ -122,12 +137,37 @@ function Vender({ negocio }: { negocio: Negocio }) {
             {impuesto > 0 && <div className="row spread"><span className="muted small">Impuesto</span><span>{money(impuesto)}</span></div>}
             <div className="row spread" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}><span>Total</span><span className="grad-text">{money(total)}</span></div>
             <label style={{ marginTop: 10 }}>Método de pago</label>
-            <select value={metodoPago} onChange={(e) => setMetodoPago(e.target.value)}>
+            <select value={metodoPago} onChange={(e) => { setMetodoPago(e.target.value); if (e.target.value !== "fiado") { setClienteSel(null); setClienteQ(""); } }}>
               <option value="efectivo">Efectivo</option>
               <option value="tarjeta">Tarjeta</option>
               <option value="transferencia">Transferencia</option>
+              {credit && <option value="fiado">Fiado</option>}
               <option value="otro">Otro</option>
             </select>
+            {metodoPago === "fiado" && (
+              <div style={{ marginTop: 8 }}>
+                {clienteSel ? (
+                  <div className="row spread">
+                    <span className="small">Fiado a <strong>{clienteSel.nombre}</strong> {Number(clienteSel.saldoFiado) > 0 && <span className="muted">(ya debe {money(clienteSel.saldoFiado)})</span>}</span>
+                    <button type="button" className="ghost small" onClick={() => setClienteSel(null)}>Cambiar</button>
+                  </div>
+                ) : (
+                  <>
+                    <input placeholder="Busca el cliente por nombre o teléfono…" value={clienteQ} onChange={(e) => setClienteQ(e.target.value)} />
+                    {clienteResultados.length > 0 && (
+                      <div className="card" style={{ background: "var(--surface-3)", marginTop: 6, maxHeight: 160, overflowY: "auto" }}>
+                        {clienteResultados.map((c) => (
+                          <div className="list-item" key={c.id} style={{ cursor: "pointer" }} onClick={() => { setClienteSel(c); setClienteQ(""); setClienteResultados([]); }}>
+                            <span>{c.nombre}</span>
+                            <span className="muted small">{c.telefono ?? ""}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
             <button className="primary" style={{ width: "100%", marginTop: 12 }} onClick={cobrar}>Cobrar {money(total)}</button>
           </div>
         </div>

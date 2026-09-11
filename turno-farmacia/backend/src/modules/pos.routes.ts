@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { BadRequest, Conflict } from "../lib/errors.js";
+import { BadRequest, Conflict, NotFound } from "../lib/errors.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { requireAuth } from "../middleware/auth.js";
 import { requireAcceso } from "../lib/acceso.js";
@@ -69,7 +69,8 @@ posRouter.post(
 // ---------- VENTAS (POS) ----------
 const ventaSchema = z.object({
   negocioId: z.string().min(1),
-  metodoPago: z.enum(["efectivo", "tarjeta", "transferencia", "otro"]).default("efectivo"),
+  metodoPago: z.enum(["efectivo", "tarjeta", "transferencia", "fiado", "otro"]).default("efectivo"),
+  clienteId: z.string().min(1).optional(),
   lineas: z.array(z.object({
     productoId: z.string().optional(),
     nombre: z.string().min(1).max(150),
@@ -85,6 +86,16 @@ posRouter.post(
   asyncHandler(async (req, res) => {
     const d = ventaSchema.parse(req.body);
     await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "pos");
+    if (d.metodoPago === "fiado" && !d.clienteId) {
+      throw BadRequest("Una venta fiada requiere elegir un cliente", "FIADO_SIN_CLIENTE");
+    }
+
+    // El cliente del fiado debe ser de este negocio (evita fiar a un cliente ajeno).
+    let cliente: { id: string } | null = null;
+    if (d.clienteId) {
+      cliente = await prisma.clienteNegocio.findFirst({ where: { id: d.clienteId, negocioId: d.negocioId }, select: { id: true } });
+      if (!cliente) throw NotFound("Cliente no encontrado");
+    }
 
     // Impuesto por línea: usa el de la línea o el del producto.
     const ids = d.lineas.map((l) => l.productoId).filter(Boolean) as string[];
@@ -111,6 +122,7 @@ posRouter.post(
       const v = await tx.venta.create({
         data: {
           negocioId: d.negocioId, subtotal, impuesto, total, metodoPago: d.metodoPago, sesionCajaId: sesion?.id ?? null,
+          clienteId: cliente?.id ?? null,
           lineas: { create: lineasCalc },
         },
         include: { lineas: true },
@@ -120,6 +132,10 @@ posRouter.post(
         if (!l.productoId || !mapProd.has(l.productoId)) continue;
         await tx.producto.update({ where: { id: l.productoId }, data: { stock: { decrement: l.cantidad } } });
         await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "venta", cantidad: -Math.abs(l.cantidad), motivo: `Venta ${v.id.slice(-6)}` } });
+      }
+      // Fiado: el total de la venta se suma al saldo del cliente (increment atómico).
+      if (d.metodoPago === "fiado" && cliente) {
+        await tx.clienteNegocio.update({ where: { id: cliente.id }, data: { saldoFiado: { increment: total } } });
       }
       return v;
     });

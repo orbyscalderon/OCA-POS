@@ -97,7 +97,7 @@ export function Precios({ onRegistrar }: { onRegistrar: () => void }) {
 
       <Faq items={PREGUNTAS} />
 
-      <p style={{ textAlign: "center", marginTop: 20 }}><a href="/">← {t("common.back")}</a></p>
+      <p style={{ textAlign: "center", marginTop: 20 }}><a href="/">{t("common.back")}</a></p>
     </div>
   );
 }

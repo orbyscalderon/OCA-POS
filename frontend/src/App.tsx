@@ -8,7 +8,7 @@ import { SuperadminView } from "./components/SuperadminView";
 import { ResetPassword } from "./components/ResetPassword";
 import { AceptarInvitacion } from "./components/AceptarInvitacion";
 import { VerificarEmail } from "./components/VerificarEmail";
-import { AccountBar } from "./components/AccountBar";
+import { AccountBar, CuentaMenu } from "./components/AccountBar";
 import { LangToggle } from "./components/LangToggle";
 import { Legal } from "./components/Legal";
 import { CookieConsent } from "./components/CookieConsent";
@@ -220,6 +220,7 @@ export default function App() {
               <button className={modoSuper === "cliente" ? "on" : ""} onClick={() => setModoSuper("cliente")}>{t("nav.modeClient")}</button>
             </div>
           )}
+          <CuentaMenu />
           <button className="ghost small" onClick={logout}>{t("nav.logout")}</button>
         </div>
       </Header>

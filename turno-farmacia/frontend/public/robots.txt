@@ -1,8 +1,0 @@
-User-agent: *
-Allow: /
-Disallow: /verificar/
-Disallow: /reset/
-Disallow: /invitacion/
-
-# Sustituye por tu dominio real al publicar:
-# Sitemap: https://tudominio.com/sitemap.xml

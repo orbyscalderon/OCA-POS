@@ -77,7 +77,11 @@ async function startEmbeddedPostgres() {
 }
 
 function startBackend() {
-  const dbUrl = `postgresql://postgres@127.0.0.1:${PG_PORT}/postgres?sslmode=disable`;
+  // connection_limit=1: PGlite es un único motor embebido, no soporta varias conexiones
+  // concurrentes de verdad — con el pool por defecto de Prisma, dos queries en paralelo
+  // (Promise.all) pueden fallar con "Can't reach database server". Con una sola conexión,
+  // Prisma serializa las queries en vez de abrir varias al mismo tiempo.
+  const dbUrl = `postgresql://postgres@127.0.0.1:${PG_PORT}/postgres?sslmode=disable&connection_limit=1`;
   fs.mkdirSync(uploadsDir, { recursive: true });
 
   // Se ejecuta con el propio Node embebido de Electron (ELECTRON_RUN_AS_NODE), así no

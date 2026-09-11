@@ -23,7 +23,7 @@ function soloDigitos(telefono: string): string {
 
 function textoMensaje(datos: DatosMensaje): string {
   return (
-    `¡Hola! Confirmé mi reserva en Turno. ` +
+    `¡Hola! Confirmé mi reserva en OCA POS. ` +
     `Profesional: ${datos.nombreProfesional}. ` +
     `Servicio: ${datos.nombreServicio}. ` +
     `Fecha: ${formatearFecha(datos.fecha)}. ` +

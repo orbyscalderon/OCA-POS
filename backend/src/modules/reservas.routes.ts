@@ -240,7 +240,7 @@ async function confirmarReservaPagada(reservaId: number): Promise<string> {
 
   const tpl = emailConfirmacionReserva({
     nombre: reserva.cliente.nombre,
-    negocio: "tu negocio en Turno",
+    negocio: "tu negocio en OCA POS",
     profesional: reserva.peluquero.nombre,
     servicio: reserva.servicio.nombreServicio,
     fecha: fechaISO,

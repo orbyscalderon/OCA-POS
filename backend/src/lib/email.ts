@@ -39,17 +39,17 @@ export async function enviarEmail(params: { to: string; subject: string; html: s
 function layout(titulo: string, cuerpo: string) {
   return `
   <div style="font-family:sans-serif;max-width:520px;margin:0 auto;color:#1a1d24">
-    <h2 style="color:#4f8cff">Turno</h2>
+    <h2 style="color:#4f8cff">OCA POS</h2>
     <h3>${titulo}</h3>
     ${cuerpo}
     <hr style="border:none;border-top:1px solid #eee;margin:24px 0"/>
-    <p style="font-size:12px;color:#888">Este es un mensaje automático de Turno · Operado por ${env.companyName} · ${env.companySupportEmail}</p>
+    <p style="font-size:12px;color:#888">Este es un mensaje automático de OCA POS · Operado por ${env.companyName} · ${env.companySupportEmail}</p>
   </div>`;
 }
 
 export function emailVerificacion(nombre: string, url: string) {
   return {
-    subject: "Verifica tu email en Turno",
+    subject: "Verifica tu email en OCA POS",
     html: layout(
       `¡Hola ${nombre}!`,
       `<p>Confirma tu cuenta pulsando el botón:</p>
@@ -110,7 +110,7 @@ export function emailRecordatorio(datos: {
 
 export function emailReset(nombre: string, url: string) {
   return {
-    subject: "Restablece tu contraseña en Turno",
+    subject: "Restablece tu contraseña en OCA POS",
     html: layout(
       `Hola ${nombre}`,
       `<p>Pulsa para crear una nueva contraseña (válido 1 hora):</p>

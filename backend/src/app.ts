@@ -20,6 +20,7 @@ import { statsRouter } from "./modules/stats.routes.js";
 import { perfilesRouter } from "./modules/perfiles.routes.js";
 import { lendingRouter } from "./modules/lending.routes.js";
 import { inventoryRouter } from "./modules/inventory.routes.js";
+import { dispositivosRouter } from "./modules/dispositivos.routes.js";
 import { posRouter } from "./modules/pos.routes.js";
 import { agroRouter } from "./modules/agro.routes.js";
 import { tablesRouter } from "./modules/tables.routes.js";
@@ -95,6 +96,7 @@ export function crearApp() {
   app.use("/api/perfiles", perfilesRouter);
   app.use("/api/lending", lendingRouter);
   app.use("/api/inventario", inventoryRouter);
+  app.use("/api/dispositivos", dispositivosRouter);
   app.use("/api/pos", posRouter);
   app.use("/api/agro", agroRouter);
   app.use("/api/mesas", tablesRouter);

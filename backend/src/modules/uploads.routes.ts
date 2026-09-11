@@ -5,6 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { BadRequest, Forbidden, NotFound } from "../lib/errors.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
 import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAcceso } from "../lib/acceso.js";
 import { storage } from "../lib/storage.js";
 
 export const uploadsRouter = Router();
@@ -53,6 +54,23 @@ uploadsRouter.post(
 
     const imagenUrl = await guardarArchivo(req.file);
     await prisma.servicio.update({ where: { id }, data: { imagenUrl } });
+    res.status(201).json({ imagenUrl });
+  }),
+);
+
+// ---------- Foto de un producto (quien tenga acceso a inventario) ----------
+uploadsRouter.post(
+  "/producto/:productoId",
+  requireAuth,
+  upload.single("imagen"),
+  asyncHandler(async (req, res) => {
+    if (!req.file) throw BadRequest("Falta la imagen (campo 'imagen', jpg/png/webp, máx 3MB)");
+    const producto = await prisma.producto.findUnique({ where: { id: req.params.productoId } });
+    if (!producto) throw NotFound("Producto no encontrado");
+    await requireAcceso(producto.negocioId, req.user!.sub, req.user!.rol, "inventario");
+
+    const imagenUrl = await guardarArchivo(req.file);
+    await prisma.producto.update({ where: { id: producto.id }, data: { imagenUrl } });
     res.status(201).json({ imagenUrl });
   }),
 );

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api, ApiError, type Negocio } from "../api";
+import { api, ApiError, assetUrl, type Negocio } from "../api";
 import { useT } from "../i18n";
 
 // Módulo POS + Inventario + Caja (rubros de retail/alimentos: supermercado, vape, ferretería, farmacia…).
@@ -12,12 +12,24 @@ interface Producto {
   // Si este producto (p. ej. "Recarga") descuenta stock de OTRO producto (el pote) en vez de
   // llevar stock propio.
   productoFuenteId: string | null; rendimientoPorVenta: string | number | null;
+  imagenUrl: string | null;
+  tipoProducto: "consumible" | "hardware";
+  notasTecnicas: string | null;
 }
 interface Sesion { id: string; montoInicial: string | number; abiertaEn: string; estado: string }
 interface Venta { id: string; total: string | number; metodoPago: string; createdAt: string }
 
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
+
+interface PerfilDispositivo { id: string; nombre: string; capacidadMl: string | number }
+// Ícono según la capacidad — puramente visual, no hay foto real de "tamaño genérico de tanque".
+function iconoPerfil(ml: number): string {
+  if (ml <= 2) return "💧";
+  if (ml <= 4) return "🔹";
+  if (ml <= 6) return "🔷";
+  return "🟪";
+}
 
 // ---------- VENDER (POS) ----------
 interface LineaCarrito { productoId?: string; nombre: string; cantidad: number; precioUnit: number; impuestoPct: number }
@@ -41,6 +53,16 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   // recarga se calculan solos a partir de eso, no hace falta cargarlos a mano cada vez.
   const [recargaPendiente, setRecargaPendiente] = useState<Producto | null>(null);
   const [mlRecarga, setMlRecarga] = useState("");
+  // Precio de venta de ESTA recarga: se sugiere proporcional al precio del pote, pero el
+  // cajero lo puede ajustar libremente antes de confirmar (el negocio decide cuánto cobrar,
+  // el sistema solo calcula el costo/margen de referencia).
+  const [precioRecargaEditado, setPrecioRecargaEditado] = useState<string | null>(null);
+  // Perfiles de dispositivo (Pod Estándar 2ml, Mod Mediano 5ml...) configurados por el dueño
+  // en Inventario — reemplazan tener que escribir los ml cada vez.
+  const [perfiles, setPerfiles] = useState<PerfilDispositivo[]>([]);
+  useEffect(() => {
+    api.get<{ perfiles: PerfilDispositivo[] }>(`/dispositivos?negocioId=${negocio.id}`).then((r) => setPerfiles(r.perfiles)).catch(() => {});
+  }, [negocio.id]);
 
   // Búsqueda de cliente para fiar la venta (solo si el rubro tiene el módulo de crédito).
   useEffect(() => {
@@ -66,7 +88,7 @@ function agregar(p: Producto) {
     // Un líquido con volumen (ml) no se vende "1 unidad = el pote entero": se pregunta cuántos
     // ml se lleva el cliente y se calcula el precio proporcional al pote.
     if (p.volumenMl != null && num(p.volumenMl) > 0) {
-      setRecargaPendiente(p); setMlRecarga(""); setBusqueda(""); setResultados([]);
+      setRecargaPendiente(p); setMlRecarga(""); setPrecioRecargaEditado(null); setBusqueda(""); setResultados([]);
       return;
     }
     setCarrito((c) => {
@@ -83,13 +105,22 @@ function agregar(p: Producto) {
     const vol = num(p.volumenMl);
     return vol > 0 ? num(p.precioVenta) / vol : 0;
   }
+  // Costo por ml (si el dueño cargó el costo del pote) — para ver el costo base de la recarga
+  // y calcular la ganancia real, no solo el precio de venta.
+  function costoPorMl(p: Producto): number | null {
+    const vol = num(p.volumenMl);
+    return vol > 0 && p.costo != null ? num(p.costo) / vol : null;
+  }
 
   function confirmarRecarga() {
     if (!recargaPendiente) return;
     const ml = Number(mlRecarga);
     if (!ml || ml <= 0) return;
     const p = recargaPendiente;
-    const precioUnit = precioPorMl(p);
+    // Si el cajero no tocó el precio sugerido, se usa el proporcional; si lo editó, se usa
+    // lo que puso (el negocio decide el precio final de la recarga).
+    const precioTotal = precioRecargaEditado != null ? Number(precioRecargaEditado) : ml * precioPorMl(p);
+    const precioUnit = precioTotal / ml;
     setCarrito((c) => [...c, {
       productoId: p.id,
       nombre: `${p.nombre} (${ml} ml)`,
@@ -97,7 +128,7 @@ function agregar(p: Producto) {
       precioUnit,
       impuestoPct: num(p.impuestoPct),
     }]);
-    setRecargaPendiente(null); setMlRecarga(""); inputRef.current?.focus();
+    setRecargaPendiente(null); setMlRecarga(""); setPrecioRecargaEditado(null); inputRef.current?.focus();
   }
 
   function setCant(i: number, cantidad: number) {
@@ -151,13 +182,16 @@ function agregar(p: Producto) {
             const esLiquido = p.volumenMl != null && num(p.volumenMl) > 0;
             return (
               <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => agregar(p)}>
-                <div>
-                  <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br />
-                  <span className="muted small">
-                    {esLiquido
-                      ? `${t("pos.stock")}: ${num(p.stock)} ml · ${money(precioPorMl(p))}/ml`
-                      : `${t("pos.stock")}: ${num(p.stock)} ${p.unidad}`}
-                  </span>
+                <div className="row" style={{ gap: 10 }}>
+                  {p.imagenUrl && <img src={assetUrl(p.imagenUrl)} alt="" style={{ width: 36, height: 36, borderRadius: 6, objectFit: "cover" }} />}
+                  <div>
+                    <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br />
+                    <span className="muted small">
+                      {esLiquido
+                        ? `${t("pos.stock")}: ${num(p.stock)} ml · ${money(precioPorMl(p))}/ml`
+                        : `${t("pos.stock")}: ${num(p.stock)} ${p.unidad}`}
+                    </span>
+                  </div>
                 </div>
                 <strong>{esLiquido ? t("pos.refillCta") : money(p.precioVenta)}</strong>
               </div>
@@ -168,26 +202,72 @@ function agregar(p: Producto) {
 
       {recargaPendiente && (
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 6 }}>
-          <h3 style={{ marginTop: 0 }}>{t("pos.refillTitle")} {recargaPendiente.nombre}</h3>
-          <p className="muted small">
-            {t("pos.refillStock")}: {num(recargaPendiente.stock)} ml · {money(precioPorMl(recargaPendiente))}/ml
-          </p>
-          <label>{t("pos.refillMl")}</label>
+          <div className="row" style={{ gap: 10, alignItems: "flex-start" }}>
+            {recargaPendiente.imagenUrl && (
+              <img src={assetUrl(recargaPendiente.imagenUrl)} alt="" style={{ width: 56, height: 56, borderRadius: 8, objectFit: "cover", flexShrink: 0 }} />
+            )}
+            <div>
+              <h3 style={{ margin: 0 }}>{t("pos.refillTitle")} {recargaPendiente.nombre}</h3>
+              <p className="muted small" style={{ margin: "2px 0 0" }}>
+                {t("pos.refillStock")}: {num(recargaPendiente.stock)} ml · {money(precioPorMl(recargaPendiente))}/ml
+              </p>
+            </div>
+          </div>
+          {recargaPendiente.notasTecnicas && (
+            <p className="small" style={{ marginTop: 8, background: "var(--surface-3)", padding: 8, borderRadius: 8 }}>
+              💡 {recargaPendiente.notasTecnicas}
+            </p>
+          )}
+
+          <label style={{ marginTop: 10 }}>{t("pos.refillTank")}</label>
+          <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
+            {perfiles.map((tk) => {
+              const ml = num(tk.capacidadMl);
+              return (
+                <button
+                  key={tk.id}
+                  type="button"
+                  className={`ghost small ${mlRecarga === String(ml) ? "active" : ""}`}
+                  style={mlRecarga === String(ml) ? { borderColor: "var(--brand-500)", color: "var(--brand-300)" } : undefined}
+                  onClick={() => { setMlRecarga(String(ml)); setPrecioRecargaEditado(null); }}
+                >
+                  {iconoPerfil(ml)} {tk.nombre} ({ml}ml)
+                </button>
+              );
+            })}
+          </div>
+          <label style={{ marginTop: 10 }}>{t("pos.refillMlCustom")}</label>
           <input
-            type="number" min="0" step="0.1" autoFocus value={mlRecarga}
-            onChange={(e) => setMlRecarga(e.target.value)}
+            type="number" min="0" step="0.1" value={mlRecarga}
+            onChange={(e) => { setMlRecarga(e.target.value); setPrecioRecargaEditado(null); }}
             onKeyDown={(e) => e.key === "Enter" && confirmarRecarga()}
             placeholder="4"
           />
-          {mlRecarga && Number(mlRecarga) > 0 && (
-            <p className="small" style={{ marginTop: 6 }}>
-              {t("pos.refillPrice")}: <strong>{money(Number(mlRecarga) * precioPorMl(recargaPendiente))}</strong>
-              {Number(mlRecarga) > num(recargaPendiente.stock) && <span className="error"> · {t("pos.refillNotEnough")}</span>}
-            </p>
-          )}
+          {mlRecarga && Number(mlRecarga) > 0 && (() => {
+            const ml = Number(mlRecarga);
+            const sugerido = ml * precioPorMl(recargaPendiente);
+            const costoBase = costoPorMl(recargaPendiente) != null ? ml * costoPorMl(recargaPendiente)! : null;
+            const precioActual = precioRecargaEditado != null ? Number(precioRecargaEditado) : sugerido;
+            const margen = costoBase != null ? precioActual - costoBase : null;
+            return (
+              <>
+                <label style={{ marginTop: 8 }}>{t("pos.refillPrice")}</label>
+                <input
+                  type="number" min="0" step="0.01"
+                  value={precioRecargaEditado ?? sugerido.toFixed(2)}
+                  onChange={(e) => setPrecioRecargaEditado(e.target.value)}
+                />
+                <p className="small" style={{ marginTop: 4 }}>
+                  {costoBase != null && <><span className="muted">{t("pos.refillBaseCost")}: {money(costoBase)}</span>{" · "}</>}
+                  {margen != null && <span className={margen >= 0 ? "success" : "error"}>{t("pos.refillMargin")}: {money(margen)}</span>}
+                  {Number(mlRecarga) > num(recargaPendiente.stock) && <span className="error"> · {t("pos.refillNotEnough")}</span>}
+                </p>
+              </>
+            );
+          })()}
           <div className="row" style={{ marginTop: 8 }}>
             <button className="primary" disabled={!mlRecarga || Number(mlRecarga) <= 0} onClick={confirmarRecarga}>{t("pos.refillAdd")}</button>
-            <button className="ghost" onClick={() => { setRecargaPendiente(null); setMlRecarga(""); }}>{t("common.cancel")}</button>
+            <button className="ghost" onClick={() => { setRecargaPendiente(null); setMlRecarga(""); setPrecioRecargaEditado(null); }}>{t("common.cancel")}</button>
           </div>
         </div>
       )}
@@ -255,16 +335,19 @@ function agregar(p: Producto) {
 interface FormProducto {
   nombre: string; sku: string; categoria: string; precioVenta: string; impuestoPct: string; stock: string; unidad: string; stockMinimo: string;
   volumenMl: string; nicotinaMg: string; productoFuenteId: string; rendimientoPorVenta: string;
+  costo: string; tipoProducto: "consumible" | "hardware"; notasTecnicas: string;
 }
 const formVacio: FormProducto = {
   nombre: "", sku: "", categoria: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0",
   volumenMl: "", nicotinaMg: "", productoFuenteId: "", rendimientoPorVenta: "",
+  costo: "", tipoProducto: "consumible", notasTecnicas: "",
 };
 function formDeProducto(p: Producto): FormProducto {
   return {
     nombre: p.nombre, sku: p.sku ?? "", categoria: p.categoria ?? "", precioVenta: String(num(p.precioVenta)), impuestoPct: String(num(p.impuestoPct)), stock: String(num(p.stock)), unidad: p.unidad, stockMinimo: String(num(p.stockMinimo)),
     volumenMl: p.volumenMl != null ? String(num(p.volumenMl)) : "", nicotinaMg: p.nicotinaMg != null ? String(num(p.nicotinaMg)) : "",
     productoFuenteId: p.productoFuenteId ?? "", rendimientoPorVenta: p.rendimientoPorVenta != null ? String(num(p.rendimientoPorVenta)) : "",
+    costo: p.costo != null ? String(num(p.costo)) : "", tipoProducto: p.tipoProducto, notasTecnicas: p.notasTecnicas ?? "",
   };
 }
 
@@ -277,6 +360,8 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
 }) {
   const { t } = useT();
   const candidatosFuente = otrosProductos.filter((p) => p.id !== propioId && !p.productoFuenteId);
+  const vol = Number(f.volumenMl), costo = Number(f.costo), precio = Number(f.precioVenta);
+  const margenPorMl = vol > 0 && f.costo && f.precioVenta ? (precio - costo) / vol : null;
   return (
     <>
       <label>{t("pos.name")}</label>
@@ -285,14 +370,26 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
       <input value={f.sku} onChange={(e) => onChange({ ...f, sku: e.target.value })} />
       <label>{t("pos.categoryOpt")}</label>
       <input value={f.categoria} onChange={(e) => onChange({ ...f, categoria: e.target.value })} />
+      <label style={{ marginTop: 8 }}>{t("pos.productType")}</label>
+      <div className="lang-toggle" style={{ margin: "4px 0" }}>
+        <button type="button" className={f.tipoProducto === "consumible" ? "on" : ""} onClick={() => onChange({ ...f, tipoProducto: "consumible" })}>{t("pos.typeConsumable")}</button>
+        <button type="button" className={f.tipoProducto === "hardware" ? "on" : ""} onClick={() => onChange({ ...f, tipoProducto: "hardware" })}>{t("pos.typeHardware")}</button>
+      </div>
       <div className="grid grid-2">
         <div><label>{t("pos.salePrice")}</label><input type="number" step="0.01" min="0" value={f.precioVenta} onChange={(e) => onChange({ ...f, precioVenta: e.target.value })} required /></div>
+        <div><label>{t("pos.cost")}</label><input type="number" step="0.01" min="0" value={f.costo} onChange={(e) => onChange({ ...f, costo: e.target.value })} placeholder="0.00" /></div>
         <div><label>{t("pos.taxPct")}</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => onChange({ ...f, impuestoPct: e.target.value })} /></div>
         {incluirStockInicial && <div><label>{t("pos.initialStock")}</label><input type="number" step="0.001" value={f.stock} onChange={(e) => onChange({ ...f, stock: e.target.value })} /></div>}
         <div><label>{t("pos.minStock")}</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
         <div><label>{t("pos.volumeMl")}</label><input type="number" step="0.01" min="0" value={f.volumenMl} onChange={(e) => onChange({ ...f, volumenMl: e.target.value })} placeholder="30" /></div>
         <div><label>{t("pos.nicotineMg")}</label><input type="number" step="0.01" min="0" value={f.nicotinaMg} onChange={(e) => onChange({ ...f, nicotinaMg: e.target.value })} placeholder="6" /></div>
       </div>
+      {margenPorMl != null && (
+        <p className="muted small">
+          {t("pos.marginPerMl")}: <strong className={margenPorMl >= 0 ? "" : "error"}>{money(margenPorMl)}/ml</strong>
+          {" · "}{t("pos.pricePerMl")}: {money(vol > 0 ? precio / vol : 0)}/ml
+        </p>
+      )}
 
       {candidatosFuente.length > 0 && (
         <>
@@ -310,11 +407,92 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
           )}
         </>
       )}
+
+      <label style={{ marginTop: 8 }}>{t("pos.technicalNotes")}</label>
+      <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.technicalNotesHelp")}</p>
+      <textarea rows={3} value={f.notasTecnicas} onChange={(e) => onChange({ ...f, notasTecnicas: e.target.value })} style={{ width: "100%" }} />
     </>
   );
 }
 
+// Foto del producto (solo aplica a un producto ya creado — como el logo/portada del negocio).
+function FotoProducto({ producto, onSubido }: { producto: Producto; onSubido: () => void }) {
+  const { t } = useT();
+  const [error, setError] = useState("");
+  async function subir(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setError("");
+    try {
+      await api.upload(`/uploads/producto/${producto.id}`, "imagen", file);
+      onSubido();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  }
+  return (
+    <div style={{ marginTop: 8 }}>
+      <label>{t("pos.photo")}</label>
+      <div className="row" style={{ alignItems: "center", gap: 10 }}>
+        {producto.imagenUrl && <img src={assetUrl(producto.imagenUrl)} alt="" style={{ width: 48, height: 48, borderRadius: 8, objectFit: "cover" }} />}
+        <input type="file" accept="image/*" onChange={subir} />
+      </div>
+      {error && <p className="error small">{error}</p>}
+    </div>
+  );
+}
+
 // ---------- PRODUCTOS (Inventario) ----------
+// Gestión de los perfiles de dispositivo (Pod Estándar, Mod Mediano...) que aparecen como
+// botones rápidos al vender una recarga. El dueño los puede editar/sumar/borrar acá.
+function PerfilesDispositivo({ negocioId }: { negocioId: string }) {
+  const { t } = useT();
+  const [perfiles, setPerfiles] = useState<PerfilDispositivo[]>([]);
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [ml, setMl] = useState("");
+  const [error, setError] = useState("");
+
+  function cargar() { api.get<{ perfiles: PerfilDispositivo[] }>(`/dispositivos?negocioId=${negocioId}`).then((r) => setPerfiles(r.perfiles)).catch(() => {}); }
+  useEffect(cargar, [negocioId]);
+
+  async function agregar(e: React.FormEvent) {
+    e.preventDefault(); setError("");
+    try { await api.post("/dispositivos", { negocioId, nombre, capacidadMl: ml }); setNombre(""); setMl(""); cargar(); }
+    catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
+  }
+  async function quitar(id: string) { await api.del(`/dispositivos/${id}`); cargar(); }
+
+  return (
+    <div className="card">
+      <div className="row spread">
+        <h2>{t("devices.title")}</h2>
+        <button className="ghost small" onClick={() => setAbierto((v) => !v)}>{abierto ? "▲" : "▼"}</button>
+      </div>
+      <p className="muted small">{t("devices.help")}</p>
+      {abierto && (
+        <>
+          {perfiles.map((p) => (
+            <div className="list-item" key={p.id}>
+              <span>{iconoPerfil(num(p.capacidadMl))} {p.nombre}</span>
+              <div className="row" style={{ alignItems: "center", gap: 6 }}>
+                <span className="muted small">{num(p.capacidadMl)} ml</span>
+                <button className="ghost small" onClick={() => quitar(p.id)}>{t("common.delete")}</button>
+              </div>
+            </div>
+          ))}
+          <form onSubmit={agregar} className="row" style={{ marginTop: 8 }}>
+            <input placeholder={t("devices.namePh")} value={nombre} onChange={(e) => setNombre(e.target.value)} required style={{ flex: 2 }} />
+            <input type="number" min="0" step="0.1" placeholder="ml" value={ml} onChange={(e) => setMl(e.target.value)} required style={{ flex: 1 }} />
+            <button className="primary small">{t("common.add")}</button>
+          </form>
+          {error && <p className="error small">{error}</p>}
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Productos({ negocio }: { negocio: Negocio }) {
   const { t } = useT();
   const [productos, setProductos] = useState<Producto[]>([]);
@@ -336,6 +514,8 @@ export function Productos({ negocio }: { negocio: Negocio }) {
       nicotinaMg: datos.nicotinaMg === "" ? null : datos.nicotinaMg,
       productoFuenteId: datos.productoFuenteId === "" ? null : datos.productoFuenteId,
       rendimientoPorVenta: datos.rendimientoPorVenta === "" ? null : datos.rendimientoPorVenta,
+      costo: datos.costo === "" ? null : datos.costo,
+      notasTecnicas: datos.notasTecnicas === "" ? null : datos.notasTecnicas,
     };
   }
 
@@ -377,7 +557,8 @@ export function Productos({ negocio }: { negocio: Negocio }) {
 
   return (
     <div>
-      <div className="row spread">
+      <PerfilesDispositivo negocioId={negocio.id} />
+      <div className="row spread" style={{ marginTop: 12 }}>
         <span className="muted small">{productos.length} {t("pos.products")}</span>
         <button className={nuevo ? "ghost small" : "primary small"} onClick={() => { setNuevo((v) => !v); setEditandoId(null); }}>{nuevo ? t("common.cancel") : t("pos.newProduct")}</button>
       </div>
@@ -397,6 +578,7 @@ export function Productos({ negocio }: { negocio: Negocio }) {
             return (
               <form key={p.id} onSubmit={guardarEdicion} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
                 <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} otrosProductos={productos} propioId={p.id} />
+                <FotoProducto producto={p} onSubido={cargar} />
                 {error && <p className="error small">{error}</p>}
                 <div className="row" style={{ marginTop: 10 }}>
                   <button className="primary">{t("pos.saveChanges")}</button>
@@ -409,14 +591,19 @@ export function Productos({ negocio }: { negocio: Negocio }) {
           const atributos = [p.volumenMl != null ? `${num(p.volumenMl)}ml` : null, p.nicotinaMg != null ? `${num(p.nicotinaMg)}mg` : null].filter(Boolean).join(" · ");
           return (
             <div className="list-item" key={p.id}>
-              <div>
-                <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span>{atributos && <span className="muted small"> · {atributos}</span>}<br />
-                {fuente ? (
-                  <span className="badge">{t("pos.refillOf")} {fuente.nombre}</span>
-                ) : (
-                  <span className={`badge ${bajo ? "err" : "ok"}`}>{t("pos.stock")}: {num(p.stock)} {p.unidad}</span>
-                )}
-                <span className="muted small"> · {money(p.precioVenta)}</span>
+              <div className="row" style={{ gap: 10 }}>
+                {p.imagenUrl && <img src={assetUrl(p.imagenUrl)} alt="" style={{ width: 40, height: 40, borderRadius: 6, objectFit: "cover", flexShrink: 0 }} />}
+                <div>
+                  <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span>
+                  {p.tipoProducto === "hardware" && <span className="badge" style={{ marginLeft: 4 }}>{t("pos.typeHardware")}</span>}
+                  {atributos && <span className="muted small"> · {atributos}</span>}<br />
+                  {fuente ? (
+                    <span className="badge">{t("pos.refillOf")} {fuente.nombre}</span>
+                  ) : (
+                    <span className={`badge ${bajo ? "err" : "ok"}`}>{t("pos.stock")}: {num(p.stock)} {p.unidad}</span>
+                  )}
+                  <span className="muted small"> · {money(p.precioVenta)}</span>
+                </div>
               </div>
               <div className="row">
                 <button className="ghost small" onClick={() => empezarEdicion(p)}>{t("pos.edit")}</button>

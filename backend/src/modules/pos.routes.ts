@@ -116,7 +116,10 @@ posRouter.post(
     });
     const total = round2(subtotal + impuesto);
 
-    const sesion = await prisma.sesionCaja.findFirst({ where: { negocioId: d.negocioId, estado: "abierta" }, select: { id: true } });
+    const [sesion, negocioInfo] = await Promise.all([
+      prisma.sesionCaja.findFirst({ where: { negocioId: d.negocioId, estado: "abierta" }, select: { id: true } }),
+      prisma.negocio.findUnique({ where: { id: d.negocioId }, select: { puntosPorVenta: true } }),
+    ]);
 
     const venta = await prisma.$transaction(async (tx) => {
       const v = await tx.venta.create({
@@ -146,9 +149,15 @@ posRouter.post(
           await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "venta", cantidad: -Math.abs(l.cantidad), motivo: `Venta ${v.id.slice(-6)}` } });
         }
       }
-      // Fiado: el total de la venta se suma al saldo del cliente (increment atómico).
-      if (d.metodoPago === "fiado" && cliente) {
-        await tx.clienteNegocio.update({ where: { id: cliente.id }, data: { saldoFiado: { increment: total } } });
+      // Fiado (suma al saldo) y fidelización (suma puntos) del cliente, si hay uno asociado —
+      // en un solo update si aplican los dos, para no pisarse entre sí.
+      if (cliente) {
+        const cambios: { saldoFiado?: { increment: number }; puntos?: { increment: number } } = {};
+        if (d.metodoPago === "fiado") cambios.saldoFiado = { increment: total };
+        if (negocioInfo?.puntosPorVenta) cambios.puntos = { increment: negocioInfo.puntosPorVenta };
+        if (Object.keys(cambios).length > 0) {
+          await tx.clienteNegocio.update({ where: { id: cliente.id }, data: cambios });
+        }
       }
       return v;
     });

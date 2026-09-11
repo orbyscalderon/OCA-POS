@@ -106,6 +106,7 @@ const CAMPOS_NEGOCIO_MIO = {
   id: true, nombreComercial: true, categoria: true, perfil: true, slug: true,
   direccion: true, telefonoContacto: true, lat: true, lng: true,
   estadoSuscripcion: true, suscripcionHasta: true,
+  puntosPorVenta: true, puntosParaPremio: true,
 } as const;
 
 negociosRouter.get(
@@ -275,6 +276,9 @@ const actualizarNegocioSchema = z.object({
   telefonoContacto: z.string().min(6).max(20).optional(),
   lat: z.number().min(-90).max(90).nullable().optional(),
   lng: z.number().min(-180).max(180).nullable().optional(),
+  // Fidelización: cuántos puntos da cada venta y cuántos hacen falta para el premio.
+  puntosPorVenta: z.coerce.number().int().min(0).max(1000).optional(),
+  puntosParaPremio: z.coerce.number().int().min(1).max(100000).optional(),
 });
 
 negociosRouter.patch(
@@ -711,6 +715,71 @@ negociosRouter.get(
       empleados,
       totalReservas: empleados.reduce((a, e) => a + e.reservasPagadas, 0),
       totalNegocioUsd: Number(empleados.reduce((a, e) => a + e.fianzaNegocioUsd, 0).toFixed(2)),
+    });
+  }),
+);
+
+// ---------- Rentabilidad por producto (comercio/POS) ----------
+// Distinta de "/analitica" (esa es del módulo de citas/peluqueros — en un comercio minorista
+// sin agenda siempre da todo en cero). Esta mide lo que de verdad importa acá: qué producto
+// deja más margen, no solo cuál vende más — ingreso de cada línea vendida menos su costo.
+negociosRouter.get(
+  "/:id/rentabilidad",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const negocioId = req.params.id;
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "reportes");
+
+    const dias = Math.min(365, Math.max(1, Number(req.query.dias) || 30));
+    const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
+
+    const lineas = await prisma.lineaVenta.findMany({
+      where: { venta: { negocioId, createdAt: { gte: desde } } },
+      select: {
+        cantidad: true, subtotal: true, nombre: true,
+        producto: { select: { id: true, nombre: true, costo: true, tipoProducto: true, volumenMl: true } },
+      },
+    });
+
+    const porProducto = new Map<string, { nombre: string; tipoProducto: string; unidades: number; ingreso: number; costo: number }>();
+    let ingresoTotal = 0, costoTotal = 0, sinCosto = 0;
+    for (const l of lineas) {
+      const ingreso = Number(l.subtotal);
+      ingresoTotal += ingreso;
+      const key = l.producto?.id ?? `__sin_producto__${l.nombre}`;
+      const actual = porProducto.get(key) ?? {
+        nombre: l.producto?.nombre ?? l.nombre, tipoProducto: l.producto?.tipoProducto ?? "consumible", unidades: 0, ingreso: 0, costo: 0,
+      };
+      actual.unidades += Number(l.cantidad);
+      actual.ingreso += ingreso;
+      if (l.producto?.costo != null) {
+        // Para un líquido vendido por ml, `costo` es el costo del POTE COMPLETO (ej. el bote
+        // de 100ml), no por ml — hay que llevarlo a costo-por-ml antes de multiplicar por los
+        // ml de esta línea, si no el costo queda inflado ~50x (costo del bote entero × ml).
+        const vol = l.producto.volumenMl != null ? Number(l.producto.volumenMl) : 0;
+        const costoUnitario = vol > 0 ? Number(l.producto.costo) / vol : Number(l.producto.costo);
+        const costoLinea = costoUnitario * Number(l.cantidad);
+        actual.costo += costoLinea;
+        costoTotal += costoLinea;
+      } else {
+        sinCosto += ingreso; // no se puede calcular margen real sin costo cargado
+      }
+      porProducto.set(key, actual);
+    }
+
+    const productos = Array.from(porProducto.values())
+      .map((p) => ({ ...p, margen: Number((p.ingreso - p.costo).toFixed(2)), ingreso: Number(p.ingreso.toFixed(2)), costo: Number(p.costo.toFixed(2)) }))
+      .sort((a, b) => b.margen - a.margen);
+
+    res.json({
+      dias,
+      ingresoTotal: Number(ingresoTotal.toFixed(2)),
+      costoTotal: Number(costoTotal.toFixed(2)),
+      margenTotal: Number((ingresoTotal - costoTotal).toFixed(2)),
+      // Parte del ingreso de productos sin costo cargado: el margen de esa parte no se puede
+      // calcular (se muestra aparte para no mentir con un número inflado).
+      ingresoSinCosto: Number(sinCosto.toFixed(2)),
+      productos,
     });
   }),
 );

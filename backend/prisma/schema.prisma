@@ -123,6 +123,12 @@ model Negocio {
   duenoId           Int               @map("dueno_id")
   createdAt         DateTime          @default(now()) @map("created_at")
 
+  // Fidelización (módulo loyalty): cuántos puntos otorga cada venta y cuántos hacen falta
+  // para el premio (ej. "cada 10 recargas, la próxima gratis" = 1 punto por venta, 10 para el
+  // premio). Se acumulan solos al cobrar una venta con cliente asociado.
+  puntosPorVenta   Int @default(1) @map("puntos_por_venta")
+  puntosParaPremio Int @default(10) @map("puntos_para_premio")
+
   dueno        Usuario             @relation("DuenoNegocio", fields: [duenoId], references: [id], onDelete: Cascade)
   equipo       PeluqueroEquipo[]
   miembros     MiembroNegocio[]
@@ -130,6 +136,7 @@ model Negocio {
   resenas      Resena[]
   prestamos    Prestamo[]
   productos    Producto[]
+  perfilesDispositivo PerfilDispositivo[]
   ventas       Venta[]
   sesionesCaja SesionCaja[]
   lotesAgro    LoteBiologico[]
@@ -331,6 +338,7 @@ model Producto {
   negocioId   String   @map("negocio_id")
   negocio     Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
   nombre      String   @db.VarChar(150)
+  imagenUrl   String?  @map("imagen_url") @db.VarChar(255)
   sku         String?  @db.VarChar(60) // código de barras / SKU
   categoria   String?  @db.VarChar(60)
   unidad      String   @default("UND") @db.VarChar(12)
@@ -352,6 +360,13 @@ model Producto {
   volumenMl  Decimal? @map("volumen_ml") @db.Decimal(8, 2)
   nicotinaMg Decimal? @map("nicotina_mg") @db.Decimal(6, 2)
 
+  // Hardware (dispositivos, se vende una vez) vs consumible (líquidos/resistencias, el
+  // cliente vuelve a comprar seguido) — separa el inventario para poder mirarlos aparte.
+  tipoProducto String @default("consumible") @map("tipo_producto") @db.VarChar(20)
+  // Asesoría técnica para el personal al vender (ej. "sales de nicotina: solo con pods
+  // pequeños, no en atomizadores grandes") — se muestra en el mostrador al agregarlo al carrito.
+  notasTecnicas String? @map("notas_tecnicas") @db.Text
+
   // Si este producto es un SERVICIO que se sirve consumiendo stock de OTRO producto (p. ej.
   // "Recarga" descuenta ml del pote "Líquido Mango 30ml"), en vez de llevar stock propio.
   // rendimientoPorVenta = cuánto se descuenta del producto fuente por cada unidad vendida de
@@ -370,6 +385,22 @@ model Producto {
   @@index([loteId])
   @@index([productoFuenteId])
   @@map("productos")
+}
+
+// Plantillas de capacidad de dispositivo (pod/mod/tanque): NO son productos que se venden,
+// son perfiles reutilizables para calcular cuántos ml se lleva un cliente en una recarga sin
+// tener que escribir el número cada vez. Editables por negocio — el dueño puede sumar/ajustar
+// sus propios perfiles, no quedan fijos en el código.
+model PerfilDispositivo {
+  id          String   @id @default(cuid())
+  negocioId   String   @map("negocio_id")
+  negocio     Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  nombre      String   @db.VarChar(80)
+  capacidadMl Decimal  @map("capacidad_ml") @db.Decimal(8, 2)
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([negocioId])
+  @@map("perfiles_dispositivo")
 }
 
 model MovimientoStock {

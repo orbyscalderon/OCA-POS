@@ -217,6 +217,9 @@ export interface Negocio {
   ratingPromedio?: number;
   ratingConteo?: number;
   distanciaKm?: number | null;
+  // Fidelización: cuántos puntos da cada venta y cuántos hacen falta para el premio.
+  puntosPorVenta?: number;
+  puntosParaPremio?: number;
 }
 
 // Rubro del motor de nicho (activa sus módulos).

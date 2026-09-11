@@ -26,6 +26,12 @@ export function ClientesView({ negocio, loyalty = false, credit = false }: { neg
   }
   async function puntos(id: string, delta: number) { await api.post(`/clientes/${id}/puntos`, { delta }); cargar(); }
 
+  const paraPremio = negocio.puntosParaPremio ?? 10;
+  async function canjear(c: Cliente) {
+    if (!confirm(`${t("clientes.redeemConfirm")} ${c.nombre}?`)) return;
+    await puntos(c.id, -paraPremio);
+  }
+
   async function cobrar(c: Cliente) {
     const saldo = Number(c.saldoFiado);
     const v = prompt(`${t("clientes.collectPrompt")} "${c.nombre}" (${t("clientes.owes").toLowerCase()} ${money(saldo)}):`, saldo.toFixed(2));
@@ -65,9 +71,10 @@ export function ClientesView({ negocio, loyalty = false, credit = false }: { neg
               {credit && debe && <button className="ghost small" onClick={() => cobrar(c)}>{t("clientes.collect")}</button>}
               {loyalty && (
                 <>
-                  <span className="badge ok">⭐ {c.puntos}</span>
+                  <span className={`badge ${c.puntos >= paraPremio ? "ok" : ""}`}>⭐ {c.puntos}/{paraPremio}</span>
                   <button className="ghost small" onClick={() => puntos(c.id, 1)}>+1</button>
                   <button className="ghost small" onClick={() => puntos(c.id, -1)}>−1</button>
+                  {c.puntos >= paraPremio && <button className="primary small" onClick={() => canjear(c)}>{t("clientes.redeem")}</button>}
                 </>
               )}
             </div>

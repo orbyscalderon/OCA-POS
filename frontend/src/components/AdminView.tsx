@@ -360,7 +360,10 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
           {modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
           {modulos.includes("expenses") && <GastosView negocio={negocio} />}
           {modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}
-          <Analitica negocioId={negocio.id} />
+          {modulos.includes("pos") && <Rentabilidad negocioId={negocio.id} />}
+          {/* La analítica de citas/profesionales solo tiene datos reales en rubros con
+              agenda — en un comercio minorista sin citas siempre da todo en cero. */}
+          {modulos.includes("appointments") && <Analitica negocioId={negocio.id} />}
         </ContabilidadPanel>
       ),
     });
@@ -373,6 +376,7 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
           <Ubicacion negocio={negocio} />
           <ImagenNegocio negocioId={negocio.id} tipo="cover" />
           <ImagenNegocio negocioId={negocio.id} tipo="logo" />
+          {modulos.includes("loyalty") && <ConfigLealtad negocio={negocio} />}
           {/* Cobrar la fianza de una reserva solo aplica a rubros con citas (barbería, taller,
               veterinaria...) — un comercio minorista como una tienda de vapes no toma reservas. */}
           {modulos.includes("appointments") && <Cobros negocioId={negocio.id} />}
@@ -876,6 +880,40 @@ function SolicitarFuncion({ negocioId }: { negocioId: string }) {
   );
 }
 
+// Regla de fidelización: cuántos puntos da cada venta y cuántos hacen falta para el premio
+// (ej. "cada 10 recargas, la próxima gratis" = 1 punto por venta, 10 para el premio).
+function ConfigLealtad({ negocio }: { negocio: Negocio }) {
+  const { t } = useT();
+  const [porVenta, setPorVenta] = useState(String(negocio.puntosPorVenta ?? 1));
+  const [paraPremio, setParaPremio] = useState(String(negocio.puntosParaPremio ?? 10));
+  const [msg, setMsg] = useState("");
+  const [error, setError] = useState("");
+
+  async function guardar(e: React.FormEvent) {
+    e.preventDefault(); setError(""); setMsg("");
+    try {
+      await api.patch(`/negocios/${negocio.id}`, { puntosPorVenta: Number(porVenta), puntosParaPremio: Number(paraPremio) });
+      setMsg(t("loyalty.saved"));
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  }
+
+  return (
+    <form onSubmit={guardar} className="card">
+      <h2>{t("loyalty.title")}</h2>
+      <p className="muted small">{t("loyalty.help")}</p>
+      <div className="grid grid-2">
+        <div><label>{t("loyalty.perSale")}</label><input type="number" min="0" step="1" value={porVenta} onChange={(e) => setPorVenta(e.target.value)} /></div>
+        <div><label>{t("loyalty.forReward")}</label><input type="number" min="1" step="1" value={paraPremio} onChange={(e) => setParaPremio(e.target.value)} /></div>
+      </div>
+      {msg && <p className="success small">{msg}</p>}
+      {error && <p className="error small">{error}</p>}
+      <button className="primary" style={{ marginTop: 10 }}>{t("common.save")}</button>
+    </form>
+  );
+}
+
 function Ubicacion({ negocio }: { negocio: Negocio }) {
   const { t } = useT();
   const [direccion, setDireccion] = useState(negocio.direccion);
@@ -986,6 +1024,60 @@ function Analitica({ negocioId }: { negocioId: string }) {
             <div className="list-item" key={p.peluquero}><span>{p.peluquero}</span><strong>{p.reservas}</strong></div>
           ))}
         </div>
+      )}
+    </div>
+  );
+}
+
+interface RentabilidadData {
+  dias: number; ingresoTotal: number; costoTotal: number; margenTotal: number; ingresoSinCosto: number;
+  productos: { nombre: string; tipoProducto: string; unidades: number; ingreso: number; costo: number; margen: number }[];
+}
+
+// Qué producto deja más plata de verdad (ingreso menos costo), no solo cuál vende más —
+// distinto de "Analitica" (esa es del módulo de citas, no de ventas de comercio).
+function Rentabilidad({ negocioId }: { negocioId: string }) {
+  const { t } = useT();
+  const [dias, setDias] = useState(30);
+  const [data, setData] = useState<RentabilidadData | null>(null);
+  useEffect(() => {
+    api.get<RentabilidadData>(`/negocios/${negocioId}/rentabilidad?dias=${dias}`).then(setData).catch(() => {});
+  }, [negocioId, dias]);
+  if (!data) return null;
+  return (
+    <div className="card">
+      <div className="row spread">
+        <h2>{t("profit.title")}</h2>
+        <select value={dias} onChange={(e) => setDias(Number(e.target.value))}>
+          <option value={7}>{t("profit.last7")}</option>
+          <option value={30}>{t("profit.last30")}</option>
+          <option value={90}>{t("profit.last90")}</option>
+        </select>
+      </div>
+      <div className="grid grid-2" style={{ marginTop: 8 }}>
+        <Stat label={t("profit.income")} value={`$${data.ingresoTotal.toFixed(2)}`} icon="💰" />
+        <Stat label={t("profit.margin")} value={`$${data.margenTotal.toFixed(2)}`} icon="📈" variant="green" />
+      </div>
+      {data.ingresoSinCosto > 0 && (
+        <p className="muted small" style={{ marginTop: 8 }}>
+          {t("profit.noCostWarning")} ${data.ingresoSinCosto.toFixed(2)}
+        </p>
+      )}
+      {data.productos.length > 0 ? (
+        <div style={{ marginTop: 12 }}>
+          <h3>{t("profit.byProduct")}</h3>
+          {data.productos.map((p) => (
+            <div className="list-item" key={p.nombre}>
+              <div>
+                <strong>{p.nombre}</strong> {p.tipoProducto === "hardware" && <span className="badge">{t("pos.typeHardware")}</span>}<br />
+                <span className="muted small">{p.unidades} {t("profit.units")} · {t("profit.income")}: ${p.ingreso.toFixed(2)}</span>
+              </div>
+              <strong className={p.margen >= 0 ? "" : "error"}>${p.margen.toFixed(2)}</strong>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="muted small" style={{ marginTop: 10 }}>{t("profit.empty")}</p>
       )}
     </div>
   );

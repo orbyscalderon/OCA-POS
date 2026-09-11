@@ -29,6 +29,10 @@ const productoSchema = z.object({
   // descuenta de ese pote por cada unidad vendida de este producto (p. ej. 3 ml por recarga).
   productoFuenteId: z.string().min(1).nullable().optional(),
   rendimientoPorVenta: z.coerce.number().min(0).nullable().optional(),
+  // Hardware (dispositivo, se vende una vez) vs consumible (líquido/resistencia, se recompra).
+  tipoProducto: z.enum(["consumible", "hardware"]).default("consumible"),
+  // Asesoría técnica que ve el personal al venderlo (ej. compatibilidad, cómo recomendarlo).
+  notasTecnicas: z.string().max(2000).nullable().optional(),
 });
 
 // El producto fuente (el pote del que descuenta una recarga) debe ser del MISMO negocio —
@@ -72,6 +76,7 @@ inventoryRouter.post(
         stock: d.stock, stockMinimo: d.stockMinimo, loteId: d.loteId ?? null,
         volumenMl: d.volumenMl ?? null, nicotinaMg: d.nicotinaMg ?? null,
         productoFuenteId: d.productoFuenteId ?? null, rendimientoPorVenta: d.rendimientoPorVenta ?? null,
+        tipoProducto: d.tipoProducto, notasTecnicas: d.notasTecnicas ?? null,
       },
     });
     // Movimiento inicial de stock si arranca con existencias.

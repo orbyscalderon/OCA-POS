@@ -85,9 +85,24 @@ function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
     setCarrito((c) => c.map((l, k) => (k === i ? { ...l, cantidad: Math.max(0, cantidad) } : l)).filter((l) => l.cantidad > 0));
   }
 
-  // Al escanear/enter: si hay un único resultado, lo agrega directo.
-  function onEnter(e: React.KeyboardEvent) {
-    if (e.key === "Enter" && resultados.length > 0) { e.preventDefault(); agregar(resultados[0]); }
+  // Al escanear un código de barras, el lector "escribe" el código muy rápido y termina con
+  // Enter — mucho más rápido que el debounce de 200ms de arriba, así que acá no confiamos en
+  // `resultados` (puede estar vacío o desactualizado): se busca de una y se agrega si hay
+  // coincidencia exacta de SKU/código de barras, o si quedó un único resultado.
+  async function onEnter(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const codigo = busqueda.trim();
+    if (!codigo) return;
+    try {
+      const r = await api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}&q=${encodeURIComponent(codigo)}`);
+      const exacto = r.productos.find((p) => p.sku && p.sku.toLowerCase() === codigo.toLowerCase());
+      if (exacto) { agregar(exacto); return; }
+      if (r.productos.length === 1) { agregar(r.productos[0]); return; }
+      setResultados(r.productos);
+    } catch {
+      // sin conexión momentánea: se deja el texto para reintentar o elegir de la lista ya cargada
+    }
   }
 
   const subtotal = carrito.reduce((s, l) => s + l.cantidad * l.precioUnit, 0);

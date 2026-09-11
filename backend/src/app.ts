@@ -98,6 +98,14 @@ export function crearApp() {
 
   app.use("/api", (_req, res) => res.status(404).json({ error: "Ruta no encontrada" }));
 
+  // App de escritorio (Electron): el propio backend sirve el frontend ya compilado desde
+  // el mismo origen, así no hace falta CORS ni una URL de API configurada aparte.
+  if (env.frontendDistDir) {
+    const distDir = path.resolve(env.frontendDistDir);
+    app.use(express.static(distDir));
+    app.get("*", (_req, res) => res.sendFile(path.join(distDir, "index.html")));
+  }
+
   app.use(errorHandler);
   return app;
 }

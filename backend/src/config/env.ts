@@ -72,6 +72,13 @@ const schema = z.object({
   // de un solo rubro — /perfiles solo devuelve ese, y los negocios se fuerzan a él.
   // Vacío = plataforma multi-rubro completa.
   RUBRO_FIJO: z.string().default(""),
+  // Modo "app de escritorio": el backend corre embebido dentro de Electron, sirviendo el
+  // frontend ya compilado desde el mismo proceso/origen (sin CORS) contra una base de datos
+  // local. Relaja el guardarraíl de producción que rechaza FRONTEND_ORIGIN=localhost.
+  DESKTOP_MODE: z.coerce.boolean().default(false),
+  // Carpeta del build del frontend (frontend/dist) a servir como estáticos + SPA fallback.
+  // Vacío = no servir frontend (comportamiento actual, backend puro tipo API).
+  FRONTEND_DIST_DIR: z.string().default(""),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -97,7 +104,7 @@ if (e.NODE_ENV === "production") {
   if (e.EMAIL_TRANSPORT === "smtp" && !e.SMTP_HOST) {
     errores.push("EMAIL_TRANSPORT=smtp requiere SMTP_HOST");
   }
-  if (e.FRONTEND_ORIGIN.includes("localhost")) {
+  if (e.FRONTEND_ORIGIN.includes("localhost") && !e.DESKTOP_MODE) {
     errores.push("FRONTEND_ORIGIN apunta a localhost en producción");
   }
   if (errores.length) {
@@ -163,4 +170,6 @@ export const env = {
   companySupportEmail: e.COMPANY_SUPPORT_EMAIL,
   googleClientId: e.GOOGLE_CLIENT_ID,
   rubroFijo: e.RUBRO_FIJO,
+  desktopMode: e.DESKTOP_MODE,
+  frontendDistDir: e.FRONTEND_DIST_DIR || undefined,
 } as const;

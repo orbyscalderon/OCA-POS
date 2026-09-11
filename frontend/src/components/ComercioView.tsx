@@ -15,12 +15,22 @@ interface Producto {
   imagenUrl: string | null;
   tipoProducto: "consumible" | "hardware";
   notasTecnicas: string | null;
+  // Trazabilidad de lote/vencimiento (farmacia, panadería, perecederos).
+  loteNumero: string | null; fechaVencimiento: string | null;
 }
 interface Sesion { id: string; montoInicial: string | number; abiertaEn: string; estado: string }
 interface Venta { id: string; total: string | number; metodoPago: string; createdAt: string }
 
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
+
+// Días que faltan para vencer (negativo = ya vencido). Comparación por fecha local, no UTC —
+// evita marcar como vencido algo que vence hoy mismo por diferencia de huso horario.
+function diasParaVencer(fecha: string): number {
+  const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+  const venc = new Date(fecha); venc.setHours(0, 0, 0, 0);
+  return Math.round((venc.getTime() - hoy.getTime()) / 86400000);
+}
 
 interface PerfilDispositivo { id: string; nombre: string; capacidadMl: string | number }
 // Ícono según la capacidad — puramente visual, no hay foto real de "tamaño genérico de tanque".
@@ -66,7 +76,8 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
 
   // Búsqueda de cliente para fiar la venta (solo si el rubro tiene el módulo de crédito).
   useEffect(() => {
-    if (!credit || metodoPago !== "fiado" || !clienteQ.trim()) { setClienteResultados([]); return; }
+    const necesitaCliente = metodoPago === "fiado" || metodoPago === "apartado";
+    if (!credit || !necesitaCliente || !clienteQ.trim()) { setClienteResultados([]); return; }
     const t2 = setTimeout(() => {
       api.get<{ clientes: ClienteLite[] }>(`/clientes?negocioId=${negocio.id}&q=${encodeURIComponent(clienteQ)}`)
         .then((r) => setClienteResultados(r.clientes)).catch(() => {});
@@ -162,7 +173,7 @@ function agregar(p: Producto) {
   async function cobrar() {
     setError(""); setMsg("");
     if (carrito.length === 0) return;
-    if (metodoPago === "fiado" && !clienteSel) { setError(t("pos.chooseCustomer")); return; }
+    if ((metodoPago === "fiado" || metodoPago === "apartado") && !clienteSel) { setError(t("pos.chooseCustomer")); return; }
     try {
       await api.post("/pos/ventas", { negocioId: negocio.id, metodoPago, clienteId: clienteSel?.id, lineas: carrito });
       setMsg(`${t("pos.saleRegistered")}: ${money(total)}`);
@@ -290,15 +301,17 @@ function agregar(p: Producto) {
             {impuesto > 0 && <div className="row spread"><span className="muted small">{t("pos.tax")}</span><span>{money(impuesto)}</span></div>}
             <div className="row spread" style={{ fontSize: 20, fontWeight: 800, marginTop: 4 }}><span>{t("pos.total")}</span><span className="grad-text">{money(total)}</span></div>
             <label style={{ marginTop: 10 }}>{t("pos.paymentMethod")}</label>
-            <select value={metodoPago} onChange={(e) => { setMetodoPago(e.target.value); if (e.target.value !== "fiado") { setClienteSel(null); setClienteQ(""); } }}>
+            <select value={metodoPago} onChange={(e) => { setMetodoPago(e.target.value); if (e.target.value !== "fiado" && e.target.value !== "apartado") { setClienteSel(null); setClienteQ(""); } }}>
               <option value="efectivo">{t("pos.cash")}</option>
               <option value="tarjeta">{t("pos.card")}</option>
               <option value="transferencia">{t("pos.transfer")}</option>
               {credit && <option value="fiado">{t("pos.credit")}</option>}
+              {credit && <option value="apartado">{t("pos.layaway")}</option>}
               <option value="otro">{t("pos.other")}</option>
             </select>
-            {metodoPago === "fiado" && (
+            {(metodoPago === "fiado" || metodoPago === "apartado") && (
               <div style={{ marginTop: 8 }}>
+                {metodoPago === "apartado" && <p className="muted small">{t("pos.layawayHelp")}</p>}
                 {clienteSel ? (
                   <div className="row spread">
                     <span className="small">{t("pos.creditTo")} <strong>{clienteSel.nombre}</strong> {Number(clienteSel.saldoFiado) > 0 && <span className="muted">({t("pos.alreadyOwes")} {money(clienteSel.saldoFiado)})</span>}</span>
@@ -336,11 +349,13 @@ interface FormProducto {
   nombre: string; sku: string; categoria: string; precioVenta: string; impuestoPct: string; stock: string; unidad: string; stockMinimo: string;
   volumenMl: string; nicotinaMg: string; productoFuenteId: string; rendimientoPorVenta: string;
   costo: string; tipoProducto: "consumible" | "hardware"; notasTecnicas: string;
+  loteNumero: string; fechaVencimiento: string;
 }
 const formVacio: FormProducto = {
   nombre: "", sku: "", categoria: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0",
   volumenMl: "", nicotinaMg: "", productoFuenteId: "", rendimientoPorVenta: "",
   costo: "", tipoProducto: "consumible", notasTecnicas: "",
+  loteNumero: "", fechaVencimiento: "",
 };
 function formDeProducto(p: Producto): FormProducto {
   return {
@@ -348,6 +363,7 @@ function formDeProducto(p: Producto): FormProducto {
     volumenMl: p.volumenMl != null ? String(num(p.volumenMl)) : "", nicotinaMg: p.nicotinaMg != null ? String(num(p.nicotinaMg)) : "",
     productoFuenteId: p.productoFuenteId ?? "", rendimientoPorVenta: p.rendimientoPorVenta != null ? String(num(p.rendimientoPorVenta)) : "",
     costo: p.costo != null ? String(num(p.costo)) : "", tipoProducto: p.tipoProducto, notasTecnicas: p.notasTecnicas ?? "",
+    loteNumero: p.loteNumero ?? "", fechaVencimiento: p.fechaVencimiento ? p.fechaVencimiento.slice(0, 10) : "",
   };
 }
 
@@ -411,6 +427,11 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
       <label style={{ marginTop: 8 }}>{t("pos.technicalNotes")}</label>
       <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.technicalNotesHelp")}</p>
       <textarea rows={3} value={f.notasTecnicas} onChange={(e) => onChange({ ...f, notasTecnicas: e.target.value })} style={{ width: "100%" }} />
+
+      <div className="grid grid-2" style={{ marginTop: 8 }}>
+        <div><label>{t("pos.batchNumber")}</label><input value={f.loteNumero} onChange={(e) => onChange({ ...f, loteNumero: e.target.value })} /></div>
+        <div><label>{t("pos.expiryDate")}</label><input type="date" value={f.fechaVencimiento} onChange={(e) => onChange({ ...f, fechaVencimiento: e.target.value })} /></div>
+      </div>
     </>
   );
 }
@@ -516,6 +537,8 @@ export function Productos({ negocio }: { negocio: Negocio }) {
       rendimientoPorVenta: datos.rendimientoPorVenta === "" ? null : datos.rendimientoPorVenta,
       costo: datos.costo === "" ? null : datos.costo,
       notasTecnicas: datos.notasTecnicas === "" ? null : datos.notasTecnicas,
+      loteNumero: datos.loteNumero === "" ? null : datos.loteNumero,
+      fechaVencimiento: datos.fechaVencimiento === "" ? null : datos.fechaVencimiento,
     };
   }
 
@@ -589,6 +612,7 @@ export function Productos({ negocio }: { negocio: Negocio }) {
           }
           const fuente = p.productoFuenteId ? productos.find((x) => x.id === p.productoFuenteId) : null;
           const atributos = [p.volumenMl != null ? `${num(p.volumenMl)}ml` : null, p.nicotinaMg != null ? `${num(p.nicotinaMg)}mg` : null].filter(Boolean).join(" · ");
+          const dias = p.fechaVencimiento ? diasParaVencer(p.fechaVencimiento) : null;
           return (
             <div className="list-item" key={p.id}>
               <div className="row" style={{ gap: 10 }}>
@@ -603,6 +627,11 @@ export function Productos({ negocio }: { negocio: Negocio }) {
                     <span className={`badge ${bajo ? "err" : "ok"}`}>{t("pos.stock")}: {num(p.stock)} {p.unidad}</span>
                   )}
                   <span className="muted small"> · {money(p.precioVenta)}</span>
+                  {dias != null && (
+                    <span className={`badge ${dias < 0 ? "err" : dias <= 7 ? "err" : dias <= 30 ? "warn" : ""}`} style={{ marginLeft: 4 }}>
+                      {dias < 0 ? t("pos.expired") : `${t("pos.expiresIn")} ${dias}d`}
+                    </span>
+                  )}
                 </div>
               </div>
               <div className="row">

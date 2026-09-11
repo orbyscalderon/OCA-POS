@@ -33,6 +33,9 @@ const productoSchema = z.object({
   tipoProducto: z.enum(["consumible", "hardware"]).default("consumible"),
   // Asesoría técnica que ve el personal al venderlo (ej. compatibilidad, cómo recomendarlo).
   notasTecnicas: z.string().max(2000).nullable().optional(),
+  // Trazabilidad de lote/vencimiento (farmacia, panadería, perecederos en general).
+  loteNumero: z.string().max(60).nullable().optional(),
+  fechaVencimiento: z.coerce.date().nullable().optional(),
 });
 
 // El producto fuente (el pote del que descuenta una recarga) debe ser del MISMO negocio —
@@ -77,6 +80,7 @@ inventoryRouter.post(
         volumenMl: d.volumenMl ?? null, nicotinaMg: d.nicotinaMg ?? null,
         productoFuenteId: d.productoFuenteId ?? null, rendimientoPorVenta: d.rendimientoPorVenta ?? null,
         tipoProducto: d.tipoProducto, notasTecnicas: d.notasTecnicas ?? null,
+        loteNumero: d.loteNumero ?? null, fechaVencimiento: d.fechaVencimiento ?? null,
       },
     });
     // Movimiento inicial de stock si arranca con existencias.

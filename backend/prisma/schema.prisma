@@ -360,6 +360,11 @@ model Producto {
   volumenMl  Decimal? @map("volumen_ml") @db.Decimal(8, 2)
   nicotinaMg Decimal? @map("nicotina_mg") @db.Decimal(6, 2)
 
+  // Trazabilidad de lote/vencimiento (farmacia, panadería y cualquier perecedero). Opcional —
+  // un producto sin fecha simplemente no entra en la alerta de "por vencer".
+  loteNumero        String?   @map("lote_numero") @db.VarChar(60)
+  fechaVencimiento  DateTime? @map("fecha_vencimiento") @db.Date
+
   // Hardware (dispositivos, se vende una vez) vs consumible (líquidos/resistencias, el
   // cliente vuelve a comprar seguido) — separa el inventario para poder mirarlos aparte.
   tipoProducto String @default("consumible") @map("tipo_producto") @db.VarChar(20)

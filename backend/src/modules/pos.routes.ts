@@ -67,9 +67,13 @@ posRouter.post(
 );
 
 // ---------- VENTAS (POS) ----------
+// "apartado" (layaway — Moda y cualquier retail con crédito): el cliente separa el producto
+// y lo termina de pagar después. Técnicamente se registra igual que "fiado" (el producto se
+// descuenta del stock de una vez, el saldo va a la cuenta del cliente) — la diferencia es de
+// significado para el dueño (reportar aparte cuánto es fiado real vs apartados), no de lógica.
 const ventaSchema = z.object({
   negocioId: z.string().min(1),
-  metodoPago: z.enum(["efectivo", "tarjeta", "transferencia", "fiado", "otro"]).default("efectivo"),
+  metodoPago: z.enum(["efectivo", "tarjeta", "transferencia", "fiado", "apartado", "otro"]).default("efectivo"),
   clienteId: z.string().min(1).optional(),
   lineas: z.array(z.object({
     productoId: z.string().optional(),
@@ -86,8 +90,8 @@ posRouter.post(
   asyncHandler(async (req, res) => {
     const d = ventaSchema.parse(req.body);
     await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "pos");
-    if (d.metodoPago === "fiado" && !d.clienteId) {
-      throw BadRequest("Una venta fiada requiere elegir un cliente", "FIADO_SIN_CLIENTE");
+    if ((d.metodoPago === "fiado" || d.metodoPago === "apartado") && !d.clienteId) {
+      throw BadRequest("Esta venta requiere elegir un cliente", "SIN_CLIENTE");
     }
 
     // El cliente del fiado debe ser de este negocio (evita fiar a un cliente ajeno).
@@ -149,11 +153,11 @@ posRouter.post(
           await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "venta", cantidad: -Math.abs(l.cantidad), motivo: `Venta ${v.id.slice(-6)}` } });
         }
       }
-      // Fiado (suma al saldo) y fidelización (suma puntos) del cliente, si hay uno asociado —
-      // en un solo update si aplican los dos, para no pisarse entre sí.
+      // Fiado/apartado (suma al saldo) y fidelización (suma puntos) del cliente, si hay uno
+      // asociado — en un solo update si aplican los dos, para no pisarse entre sí.
       if (cliente) {
         const cambios: { saldoFiado?: { increment: number }; puntos?: { increment: number } } = {};
-        if (d.metodoPago === "fiado") cambios.saldoFiado = { increment: total };
+        if (d.metodoPago === "fiado" || d.metodoPago === "apartado") cambios.saldoFiado = { increment: total };
         if (negocioInfo?.puntosPorVenta) cambios.puntos = { increment: negocioInfo.puntosPorVenta };
         if (Object.keys(cambios).length > 0) {
           await tx.clienteNegocio.update({ where: { id: cliente.id }, data: cambios });

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api";
-import { useT } from "../i18n";
+import { useT, type TKey } from "../i18n";
 import { Faq } from "./Faq";
 
 interface Plan { id: string; nombre: string; mensualUsd: number; anualUsd: number; anualPorMes: number; ahorroAnualUsd: number; maxNegocios: number; maxPeluqueros: number; }
@@ -9,23 +9,18 @@ interface Plan { id: string; nombre: string; mensualUsd: number; anualUsd: numbe
 // cambia es cuántos negocios y profesionales podés tener activos). Mostrarlas una sola
 // vez, en vez de repetirlas idénticas en cada tarjeta, evita dar a entender que un plan
 // "incluye más" cuando en realidad la diferencia real es solo el límite de uso.
-const INCLUIDO_EN_TODOS = [
-  { icono: "🛒", texto: "Punto de venta e inventario" },
-  { icono: "📅", texto: "Reservas y agenda online" },
-  { icono: "📒", texto: "Fiado / crédito a clientes" },
-  { icono: "💵", texto: "Caja, arqueo y reportes" },
-  { icono: "🌐", texto: "Tienda online por WhatsApp" },
-  { icono: "👥", texto: "Roles y permisos para tu equipo" },
+const INCLUIDO_EN_TODOS: { icono: string; key: TKey }[] = [
+  { icono: "🛒", key: "precios.feat1" },
+  { icono: "📅", key: "precios.feat2" },
+  { icono: "📒", key: "precios.feat3" },
+  { icono: "💵", key: "precios.feat4" },
+  { icono: "🌐", key: "precios.feat5" },
+  { icono: "👥", key: "precios.feat6" },
 ];
 
-const PREGUNTAS = [
-  { pregunta: "¿Qué pasa cuando terminan los 14 días de prueba?", respuesta: "Te pedimos elegir un plan (Básico o Pro) para seguir. No perdés nada de lo que cargaste: productos, clientes, ventas e historial quedan intactos." },
-  { pregunta: "¿Hay permanencia o contrato?", respuesta: "No. Es mes a mes (o año a año si elegís el plan anual) y podés cancelar cuando quieras desde tu cuenta." },
-  { pregunta: "¿Qué pasa si supero el límite de negocios o profesionales de mi plan?", respuesta: "Podés seguir usando todo lo que ya tenés funcionando sin problema. Para agregar un negocio o profesional adicional una vez alcanzado el límite, necesitás subir de plan." },
-  { pregunta: "¿Puedo cambiar de rubro después de crear mi negocio?", respuesta: "El rubro se elige al crear el negocio, porque define qué campos y pantallas ves. Si necesitás cambiarlo más adelante, escribinos a soporte y te ayudamos." },
-  { pregunta: "¿Mis datos están separados de los de otros negocios?", respuesta: "Sí. Cada negocio solo puede ver y operar sus propios datos — lo verificamos en cada consulta a la base de datos, no es una promesa de la interfaz." },
-  { pregunta: "¿Necesito internet para usarlo?", respuesta: "Sí, hoy el sistema funciona conectado (es una aplicación en la nube). El modo sin conexión está en el roadmap, todavía no está disponible." },
-  { pregunta: "¿Cómo pago?", respuesta: "Con tarjeta a través de Stripe. El plan anual sale como pagar 10 meses y usar 12 (2 meses gratis)." },
+const PREGUNTAS_KEYS: [TKey, TKey][] = [
+  ["faq.q1", "faq.a1"], ["faq.q2", "faq.a2"], ["faq.q3", "faq.a3"], ["faq.q4", "faq.a4"],
+  ["faq.q5", "faq.a5"], ["faq.q6", "faq.a6"], ["faq.q7", "faq.a7"],
 ];
 
 // Página pública de precios (para atraer negocios antes de registrarse).
@@ -35,6 +30,8 @@ export function Precios({ onRegistrar }: { onRegistrar: () => void }) {
   const [intervalo, setIntervalo] = useState<"mensual" | "anual">("anual");
 
   useEffect(() => { api.get<{ planes: Plan[] }>("/suscripcion/planes").then((r) => setPlanes(r.planes)).catch(() => {}); }, []);
+
+  const preguntas = PREGUNTAS_KEYS.map(([q, a]) => ({ pregunta: t(q), respuesta: t(a) }));
 
   return (
     <div className="container" style={{ maxWidth: 900 }}>
@@ -51,19 +48,19 @@ export function Precios({ onRegistrar }: { onRegistrar: () => void }) {
         {/* Prueba gratis: no es un plan de pago, es el estado inicial de todo negocio nuevo. */}
         <div className="card" style={{ display: "flex", flexDirection: "column" }}>
           <div className="row spread">
-            <h2>Prueba gratis</h2>
-            <span className="badge">14 días</span>
+            <h2>{t("precios.trialTitle")}</h2>
+            <span className="badge">{t("precios.trialBadge")}</span>
           </div>
-          <div style={{ margin: "8px 0" }}><span style={{ fontSize: 34, fontWeight: 800 }}>$0</span><span className="muted"> para empezar</span></div>
-          <p className="muted small" style={{ flex: 1 }}>Probá el sistema completo con tu rubro activado. Sin tarjeta de crédito.</p>
-          <button className="ghost" style={{ width: "100%", marginTop: 10 }} onClick={onRegistrar}>Empezar gratis</button>
+          <div style={{ margin: "8px 0" }}><span style={{ fontSize: 34, fontWeight: 800 }}>$0</span><span className="muted"> {t("precios.trialPrice")}</span></div>
+          <p className="muted small" style={{ flex: 1 }}>{t("precios.trialDesc")}</p>
+          <button className="ghost" style={{ width: "100%", marginTop: 10 }} onClick={onRegistrar}>{t("vl.startFree")}</button>
         </div>
 
         {planes.map((p, i) => (
           <div className="card" key={p.id} style={{ display: "flex", flexDirection: "column", borderColor: i === 1 ? "var(--brand-500)" : undefined, boxShadow: i === 1 ? "var(--glow)" : undefined }}>
             <div className="row spread">
               <h2>{p.nombre}</h2>
-              {i === 1 && <span className="badge ok">★ Más elegido</span>}
+              {i === 1 && <span className="badge ok">{t("precios.mostChosen")}</span>}
             </div>
             {intervalo === "mensual" ? (
               <div style={{ margin: "8px 0" }}><span style={{ fontSize: 34, fontWeight: 800 }}>${p.mensualUsd}</span><span className="muted">{t("own.perMonth")}</span></div>
@@ -84,18 +81,18 @@ export function Precios({ onRegistrar }: { onRegistrar: () => void }) {
 
       {/* Lo que traen TODOS los planes pagos, mostrado una sola vez. */}
       <div className="card" style={{ marginTop: 18 }}>
-        <h2 style={{ marginTop: 0 }}>Incluido en Básico y Pro, sin costo extra</h2>
+        <h2 style={{ marginTop: 0 }}>{t("precios.includedTitle")}</h2>
         <div className="value-grid">
           {INCLUIDO_EN_TODOS.map((f) => (
-            <div className="value-card" key={f.texto}>
+            <div className="value-card" key={f.key}>
               <span className="v-emoji">{f.icono}</span>
-              <p className="muted small" style={{ margin: 0 }}>{f.texto}</p>
+              <p className="muted small" style={{ margin: 0 }}>{t(f.key)}</p>
             </div>
           ))}
         </div>
       </div>
 
-      <Faq items={PREGUNTAS} />
+      <Faq items={preguntas} />
 
       <p style={{ textAlign: "center", marginTop: 20 }}><a href="/">{t("common.back")}</a></p>
     </div>

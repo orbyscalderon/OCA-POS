@@ -39,13 +39,14 @@ function irARegistro(perfil: string) {
 }
 
 function Footer() {
+  const { t } = useT();
   return (
     <footer className="container" style={{ textAlign: "center", paddingTop: 30, paddingBottom: 40 }}>
       <div className="faint small">
-        <a href="/terminos">Términos</a> · <a href="/privacidad">Privacidad</a> · © {new Date().getFullYear()} OC POS
+        <a href="/terminos">{t("footer.terms")}</a> · <a href="/privacidad">{t("footer.privacy")}</a> · © {new Date().getFullYear()} OC POS
       </div>
       <div className="faint small" style={{ marginTop: 4 }}>
-        Operado por <strong>{COMPANY.nombre}</strong> · {COMPANY.direccion}
+        {t("footer.operatedBy")} <strong>{COMPANY.nombre}</strong> · {COMPANY.direccion}
       </div>
       <div className="faint small">
         {COMPANY.emailSoporte} · {COMPANY.telefono}

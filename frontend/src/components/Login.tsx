@@ -3,7 +3,7 @@ import { useAuth } from "../auth";
 import { api, ApiError } from "../api";
 import { useT } from "../i18n";
 import { GoogleButton } from "./GoogleButton";
-import { COPY } from "./VerticalLanding";
+import { copyDeRubro } from "./VerticalLanding";
 import { rubroTema } from "../rubroTema";
 
 // Modo "rubro fijo": si este deploy es un producto de un solo rubro, el login debe
@@ -26,7 +26,7 @@ const EMOJIS_RUBRO: Record<string, string[]> = {
 
 export function Login() {
   const { login, loginGoogle, registro } = useAuth();
-  const { t } = useT();
+  const { t, lang } = useT();
   // Si el usuario llegó desde una landing de negocio, arranca en registro como dueño.
   const intentNegocio = (() => { try { return localStorage.getItem("turno_intent") === "negocio"; } catch { return false; } })();
   const [modo, setModo] = useState<"login" | "registro" | "olvide">(intentNegocio ? "registro" : "login");
@@ -84,8 +84,8 @@ export function Login() {
   const titulo = modo === "login" ? t("login.title") : modo === "registro" ? t("login.register") : t("login.recover");
   // Con rubro fijo, esta pantalla es LA puerta de entrada de ese producto: debe
   // sentirse suya, no la de una plataforma multi-rubro de reservas de belleza.
-  const copyRubro = RUBRO_FIJO ? COPY[RUBRO_FIJO] : null;
-  const emojisRubro = RUBRO_FIJO ? (EMOJIS_RUBRO[RUBRO_FIJO] ?? ["🏪", "✨", "📦", "💳", "✅"]) : ["💇", "💅", "🧖", "💆", "✨"];
+  const copyRubro = RUBRO_FIJO ? copyDeRubro(RUBRO_FIJO, lang) : null;
+  const emojisRubro = RUBRO_FIJO ? (EMOJIS_RUBRO[RUBRO_FIJO] ?? ["🏪", "✨", "📦", "💳", "✅"]) : ["🏪", "🛒", "📅", "💳", "✨"];
   const accent = RUBRO_FIJO ? rubroTema(RUBRO_FIJO).accent : undefined;
 
   return (
@@ -99,9 +99,9 @@ export function Login() {
             ))}
           </div>
           <h1 className="grad-text" style={{ fontSize: 38, marginTop: 16 }}>
-            {copyRubro?.titulo ?? t("mkt.heroTitle")}
+            {copyRubro?.titulo ?? t("login.genericTitle")}
           </h1>
-          <p className="muted" style={{ maxWidth: 380, margin: "8px auto 0" }}>{copyRubro?.sub ?? t("brand.tagline")}</p>
+          <p className="muted" style={{ maxWidth: 380, margin: "8px auto 0" }}>{copyRubro?.sub ?? t("login.genericSub")}</p>
         </div>
 
         <div className="card glass-card pop">

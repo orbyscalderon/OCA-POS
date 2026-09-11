@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, assetUrl } from "../api";
+import { useT } from "../i18n";
 
 // Tienda online PÚBLICA de un negocio, con checkout por WhatsApp. Ruta: /tienda/:slug
 interface ProductoTienda { id: string; nombre: string; precioVenta: string | number; categoria: string | null; sku: string | null; unidad: string; stock: string | number }
@@ -7,6 +8,7 @@ interface NegocioTienda { id: string; nombreComercial: string; telefonoContacto:
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 
 export function Storefront({ slug }: { slug: string }) {
+  const { t } = useT();
   const [negocio, setNegocio] = useState<NegocioTienda | null>(null);
   const [productos, setProductos] = useState<ProductoTienda[]>([]);
   const [carrito, setCarrito] = useState<Record<string, number>>({});
@@ -16,8 +18,9 @@ export function Storefront({ slug }: { slug: string }) {
   useEffect(() => {
     api.get<{ negocio: NegocioTienda; productos: ProductoTienda[] }>(`/storefront/${slug}`)
       .then((r) => { setNegocio(r.negocio); setProductos(r.productos); })
-      .catch((e) => setError(e instanceof ApiError ? e.message : "Tienda no disponible"))
+      .catch((e) => setError(e instanceof ApiError ? e.message : t("tienda.unavailable")))
       .finally(() => setCargando(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   function add(id: string, delta: number) {
@@ -31,12 +34,12 @@ export function Storefront({ slug }: { slug: string }) {
     if (!negocio || items.length === 0) return;
     const tel = negocio.telefonoContacto.replace(/\D/g, "");
     const lineas = items.map((p) => `• ${carrito[p.id]}× ${p.nombre} — ${money(carrito[p.id] * Number(p.precioVenta))}`).join("\n");
-    const texto = `Hola ${negocio.nombreComercial}, quiero pedir:\n${lineas}\n\nTotal: ${money(total)}`;
+    const texto = `${t("tienda.greeting")} ${negocio.nombreComercial}, ${t("tienda.iWantToOrder")}\n${lineas}\n\n${t("tienda.total")}: ${money(total)}`;
     window.open(`https://wa.me/${tel}?text=${encodeURIComponent(texto)}`, "_blank");
   }
 
-  if (cargando) return <div className="container"><p className="muted">Cargando tienda…</p></div>;
-  if (error || !negocio) return <div className="container"><div className="card"><h2>Tienda no disponible</h2><p className="muted">{error}</p></div></div>;
+  if (cargando) return <div className="container"><p className="muted">{t("tienda.loading")}</p></div>;
+  if (error || !negocio) return <div className="container"><div className="card"><h2>{t("tienda.unavailable")}</h2><p className="muted">{error}</p></div></div>;
 
   const cover = assetUrl(negocio.coverUrl ?? negocio.logoUrl);
 
@@ -51,7 +54,7 @@ export function Storefront({ slug }: { slug: string }) {
       </div>
 
       {productos.length === 0 ? (
-        <div className="card"><p className="muted">Esta tienda aún no tiene productos publicados.</p></div>
+        <div className="card"><p className="muted">{t("tienda.noProducts")}</p></div>
       ) : (
         <div className="grid grid-2" style={{ marginTop: 12 }}>
           {productos.map((p) => (
@@ -66,7 +69,7 @@ export function Storefront({ slug }: { slug: string }) {
                   <strong>{carrito[p.id] ?? 0}</strong>
                   <button className="ghost small" onClick={() => add(p.id, 1)}>+</button>
                 </div>
-                <span className="muted small">Stock: {Number(p.stock)}</span>
+                <span className="muted small">{t("tienda.stock")}: {Number(p.stock)}</span>
               </div>
             </div>
           ))}
@@ -75,8 +78,8 @@ export function Storefront({ slug }: { slug: string }) {
 
       {items.length > 0 && (
         <div className="card pop" style={{ position: "sticky", bottom: 12, marginTop: 16, borderColor: "var(--brand-600)" }}>
-          <div className="row spread" style={{ fontSize: 18, fontWeight: 800 }}><span>Total ({items.length})</span><span className="grad-text">{money(total)}</span></div>
-          <button className="whatsapp" style={{ width: "100%", marginTop: 10 }} onClick={pedirPorWhatsApp}>Pedir por WhatsApp</button>
+          <div className="row spread" style={{ fontSize: 18, fontWeight: 800 }}><span>{t("tienda.total")} ({items.length})</span><span className="grad-text">{money(total)}</span></div>
+          <button className="whatsapp" style={{ width: "100%", marginTop: 10 }} onClick={pedirPorWhatsApp}>{t("tienda.orderWhatsapp")}</button>
         </div>
       )}
     </div>

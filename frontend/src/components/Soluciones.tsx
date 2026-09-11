@@ -1,17 +1,19 @@
 import { useEffect, useState } from "react";
 import { api, type Perfil } from "../api";
 import { rubroTema } from "../rubroTema";
+import { useT } from "../i18n";
 
 // Hub de soluciones: una tarjeta por rubro que lleva a su landing. Ruta: /soluciones
 export function Soluciones() {
+  const { t } = useT();
   const [perfiles, setPerfiles] = useState<Perfil[]>([]);
   useEffect(() => { api.get<{ perfiles: Perfil[] }>("/perfiles").then((r) => setPerfiles(r.perfiles)).catch(() => {}); }, []);
 
   return (
     <div className="container" style={{ maxWidth: 900 }}>
       <div className="mkt-hero" style={{ paddingBottom: 24 }}>
-        <h1>Una plataforma para cada negocio</h1>
-        <p className="sub">Elige tu rubro: activamos solo los módulos que necesitas — desde reservas hasta punto de venta, préstamos o producción avícola.</p>
+        <h1>{t("sol.title")}</h1>
+        <p className="sub">{t("sol.sub")}</p>
       </div>
       <div className="mkt-grid">
         {perfiles.map((p) => (

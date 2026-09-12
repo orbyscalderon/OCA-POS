@@ -417,6 +417,11 @@ model PerfilDispositivo {
   negocio     Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
   nombre      String   @db.VarChar(80)
   capacidadMl Decimal  @map("capacidad_ml") @db.Decimal(8, 2)
+  // Precio fijo sugerido para este tamaño (ej. "Pod Estándar siempre $2"), sin importar el
+  // precio por ml del líquido elegido. Si es null, se sigue calculando proporcional al ml
+  // (precioVenta/volumenMl × ml) como hasta ahora — en ambos casos el cajero lo puede editar
+  // antes de cobrar.
+  precio      Decimal? @db.Decimal(12, 2)
   createdAt   DateTime @default(now()) @map("created_at")
 
   @@index([negocioId])

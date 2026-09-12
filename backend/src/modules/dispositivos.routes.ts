@@ -42,6 +42,9 @@ const perfilSchema = z.object({
   negocioId: z.string().min(1),
   nombre: z.string().min(1).max(80),
   capacidadMl: z.coerce.number().positive(),
+  // Precio fijo sugerido para este tamaño (opcional) — si no se define, la venta sigue
+  // calculando el precio proporcional al ml del líquido elegido, como antes.
+  precio: z.coerce.number().min(0).nullable().optional(),
 });
 
 dispositivosRouter.post(

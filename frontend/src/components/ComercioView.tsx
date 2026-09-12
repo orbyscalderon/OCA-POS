@@ -41,7 +41,7 @@ function diasParaVencer(fecha: string): number {
   return Math.round((venc.getTime() - hoy.getTime()) / 86400000);
 }
 
-interface PerfilDispositivo { id: string; nombre: string; capacidadMl: string | number }
+interface PerfilDispositivo { id: string; nombre: string; capacidadMl: string | number; precio: string | number | null }
 // Ícono según la capacidad — puramente visual, no hay foto real de "tamaño genérico de tanque".
 function iconoPerfil(ml: number): string {
   if (ml <= 2) return "💧";
@@ -331,9 +331,14 @@ function agregar(p: Producto) {
                   type="button"
                   className={`ghost small ${mlRecarga === String(ml) ? "active" : ""}`}
                   style={mlRecarga === String(ml) ? { borderColor: "var(--brand-500)", color: "var(--brand-300)" } : undefined}
-                  onClick={() => { setMlRecarga(String(ml)); setPrecioRecargaEditado(null); }}
+                  onClick={() => {
+                    setMlRecarga(String(ml));
+                    // Si este tamaño tiene precio fijo configurado, se usa ese en vez del
+                    // proporcional al ml (el cajero lo puede seguir editando antes de cobrar).
+                    setPrecioRecargaEditado(tk.precio != null ? String(num(tk.precio)) : null);
+                  }}
                 >
-                  {iconoPerfil(ml)} {tk.nombre} ({ml}ml)
+                  {iconoPerfil(ml)} {tk.nombre} ({ml}ml{tk.precio != null ? ` · ${money(tk.precio)}` : ""})
                 </button>
               );
             })}
@@ -736,6 +741,9 @@ function PerfilesDispositivo({ negocioId }: { negocioId: string }) {
   const [abierto, setAbierto] = useState(false);
   const [nombre, setNombre] = useState("");
   const [ml, setMl] = useState("");
+  const [precio, setPrecio] = useState("");
+  const [editandoId, setEditandoId] = useState<string | null>(null);
+  const [precioEditado, setPrecioEditado] = useState("");
   const [error, setError] = useState("");
 
   function cargar() { api.get<{ perfiles: PerfilDispositivo[] }>(`/dispositivos?negocioId=${negocioId}`).then((r) => setPerfiles(r.perfiles)).catch(() => {}); }
@@ -743,10 +751,21 @@ function PerfilesDispositivo({ negocioId }: { negocioId: string }) {
 
   async function agregar(e: React.FormEvent) {
     e.preventDefault(); setError("");
-    try { await api.post("/dispositivos", { negocioId, nombre, capacidadMl: ml }); setNombre(""); setMl(""); cargar(); }
-    catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
+    try {
+      await api.post("/dispositivos", { negocioId, nombre, capacidadMl: ml, precio: precio || null });
+      setNombre(""); setMl(""); setPrecio(""); cargar();
+    } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
   async function quitar(id: string) { await api.del(`/dispositivos/${id}`); cargar(); }
+
+  function empezarEditarPrecio(p: PerfilDispositivo) {
+    setEditandoId(editandoId === p.id ? null : p.id);
+    setPrecioEditado(p.precio != null ? String(num(p.precio)) : "");
+  }
+  async function guardarPrecio(p: PerfilDispositivo) {
+    await api.patch(`/dispositivos/${p.id}`, { precio: precioEditado === "" ? null : precioEditado });
+    setEditandoId(null); cargar();
+  }
 
   return (
     <div className="card">
@@ -757,18 +776,29 @@ function PerfilesDispositivo({ negocioId }: { negocioId: string }) {
       <p className="muted small">{t("devices.help")}</p>
       {abierto && (
         <>
+          <p className="muted small">{t("devices.priceHelp")}</p>
           {perfiles.map((p) => (
-            <div className="list-item" key={p.id}>
-              <span>{iconoPerfil(num(p.capacidadMl))} {p.nombre}</span>
-              <div className="row" style={{ alignItems: "center", gap: 6 }}>
-                <span className="muted small">{num(p.capacidadMl)} ml</span>
-                <button className="ghost small" onClick={() => quitar(p.id)}>{t("common.delete")}</button>
+            <div key={p.id}>
+              <div className="list-item">
+                <span>{iconoPerfil(num(p.capacidadMl))} {p.nombre}</span>
+                <div className="row" style={{ alignItems: "center", gap: 6 }}>
+                  <span className="muted small">{num(p.capacidadMl)} ml{p.precio != null ? ` · ${money(p.precio)}` : ""}</span>
+                  <button className="ghost small" onClick={() => empezarEditarPrecio(p)}>{t("devices.editPrice")}</button>
+                  <button className="ghost small" onClick={() => quitar(p.id)}>{t("common.delete")}</button>
+                </div>
               </div>
+              {editandoId === p.id && (
+                <div className="row" style={{ gap: 6, padding: "0 4px 8px" }}>
+                  <input type="number" min="0" step="0.01" placeholder={t("devices.priceAutoPh")} value={precioEditado} onChange={(e) => setPrecioEditado(e.target.value)} style={{ flex: 1 }} />
+                  <button type="button" className="primary small" onClick={() => guardarPrecio(p)}>{t("common.save")}</button>
+                </div>
+              )}
             </div>
           ))}
           <form onSubmit={agregar} className="row" style={{ marginTop: 8 }}>
             <input placeholder={t("devices.namePh")} value={nombre} onChange={(e) => setNombre(e.target.value)} required style={{ flex: 2 }} />
             <input type="number" min="0" step="0.1" placeholder="ml" value={ml} onChange={(e) => setMl(e.target.value)} required style={{ flex: 1 }} />
+            <input type="number" min="0" step="0.01" placeholder={t("devices.priceAutoPh")} value={precio} onChange={(e) => setPrecio(e.target.value)} style={{ flex: 1 }} />
             <button className="primary small">{t("common.add")}</button>
           </form>
           {error && <p className="error small">{error}</p>}

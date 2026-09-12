@@ -75,13 +75,18 @@ const TIPO_COSTO_KEY: Record<string, TKey> = {
   transport: "agro.tipoTransport", other: "agro.tipoOther",
 };
 
+const TIPO_EVENTO_KEY: Record<string, TKey> = {
+  vacuna: "agro.eventVaccine", vitamina: "agro.eventVitamin", tratamiento: "agro.eventTreatment",
+  sintoma: "agro.eventSymptom", otro: "agro.eventOther",
+};
+
 export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNegocio }) {
   void miRol; // el acceso al módulo ya se filtra en AdminView; acá todo el que entra ve todo el módulo.
   const { t } = useT();
   const [lotes, setLotes] = useState<LoteResumen[]>([]);
   const [nuevo, setNuevo] = useState(false);
   const [abierto, setAbierto] = useState<string | null>(null);
-  const [f, setF] = useState({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "", lineaGenetica: "", galponId: "" });
+  const [f, setF] = useState({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "", precioPollito: "", lineaGenetica: "", galponId: "" });
   const [lineas, setLineas] = useState<LineaGenetica[]>([]);
   const [granjas, setGranjas] = useState<Granja[]>([]);
   const [error, setError] = useState("");
@@ -95,11 +100,17 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
     setF((prev) => ({ ...prev, lineaGenetica: "" }));
   }, [f.especie]);
 
+  // Precio por pollito × cantidad = costo total de la cría — más fácil que sacar la cuenta a
+  // mano cuando el proveedor cobra por unidad. Si no se usa, el costo total se escribe directo.
+  const costoPollitosCalculado = f.precioPollito !== "" && f.cantidadInicial !== ""
+    ? Number(f.precioPollito) * Number(f.cantidadInicial) : null;
+
   async function crear(e: React.FormEvent) {
     e.preventDefault(); setError("");
     try {
-      await api.post("/agro/lotes", { ...f, negocioId: negocio.id, costoInicial: f.costoInicial || undefined, lineaGenetica: f.lineaGenetica || undefined, galponId: f.galponId || undefined });
-      setF({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "", lineaGenetica: "", galponId: "" });
+      const costoInicial = costoPollitosCalculado ?? (f.costoInicial ? Number(f.costoInicial) : undefined);
+      await api.post("/agro/lotes", { ...f, negocioId: negocio.id, costoInicial, lineaGenetica: f.lineaGenetica || undefined, galponId: f.galponId || undefined });
+      setF({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "", precioPollito: "", lineaGenetica: "", galponId: "" });
       setNuevo(false); cargar(); cargarGranjas();
     } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
@@ -129,7 +140,12 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
             </div>
             <div><label>{t("agro.initialQty")}</label><input type="number" min="1" value={f.cantidadInicial} onChange={(e) => setF({ ...f, cantidadInicial: e.target.value })} required /></div>
             <div><label>{t("agro.entryDate")}</label><input type="date" value={f.fechaInicio} onChange={(e) => setF({ ...f, fechaInicio: e.target.value })} required /></div>
-            <div><label>{t("agro.chickCost")}</label><input type="number" step="0.01" min="0" value={f.costoInicial} onChange={(e) => setF({ ...f, costoInicial: e.target.value })} placeholder="0.00" /></div>
+            <div><label>{t("agro.chickPrice")}</label><input type="number" step="0.01" min="0" value={f.precioPollito} onChange={(e) => setF({ ...f, precioPollito: e.target.value })} placeholder="0.00" /></div>
+            {costoPollitosCalculado != null ? (
+              <p className="small muted" style={{ gridColumn: "1 / -1", margin: "-4px 0 0" }}>{t("agro.chickCostTotal")}: {money(costoPollitosCalculado)}</p>
+            ) : (
+              <div><label>{t("agro.chickCost")}</label><input type="number" step="0.01" min="0" value={f.costoInicial} onChange={(e) => setF({ ...f, costoInicial: e.target.value })} placeholder="0.00" /></div>
+            )}
             <div><label>{t("agro.geneticLine")}</label>
               <select value={f.lineaGenetica} onChange={(e) => setF({ ...f, lineaGenetica: e.target.value })}>
                 <option value="">{t("agro.geneticLineNone")}</option>
@@ -354,7 +370,7 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
     huevosJumbo: "0", huevosExtra: "0", huevosGrande: "0", huevosMediano: "0", huevosPequeno: "0",
     huevosRotos: "0", huevosSucios: "0",
   });
-  const [c, setC] = useState({ tipoCosto: "feed", monto: "", fecha: hoy(), descripcion: "" });
+  const [c, setC] = useState({ tipoCosto: "feed", monto: "", fecha: hoy(), descripcion: "", cantidadSacos: "", costoPorSaco: "" });
   const [ev, setEv] = useState({ tipo: "vacuna", nombre: "", fecha: hoy(), diasRetiro: "", notas: "" });
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
@@ -389,11 +405,16 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
     cargar(); onCambio();
   }
 
+  const usaSacos = c.tipoCosto === "feed" && c.cantidadSacos !== "" && c.costoPorSaco !== "";
+  const totalSacos = usaSacos ? Number(c.cantidadSacos) * Number(c.costoPorSaco) : null;
+
   async function agregarCosto(e: React.FormEvent) {
     e.preventDefault(); setError("");
     try {
-      await api.post(`/agro/lotes/${loteId}/costos`, c);
-      setC({ tipoCosto: c.tipoCosto, monto: "", fecha: hoy(), descripcion: "" });
+      const monto = usaSacos ? totalSacos! : Number(c.monto);
+      const descripcion = c.descripcion || (usaSacos ? `${c.cantidadSacos} ${t("agro.sacks")} × ${money(c.costoPorSaco)}` : undefined);
+      await api.post(`/agro/lotes/${loteId}/costos`, { tipoCosto: c.tipoCosto, monto, fecha: c.fecha, descripcion });
+      setC({ tipoCosto: c.tipoCosto, monto: "", fecha: hoy(), descripcion: "", cantidadSacos: "", costoPorSaco: "" });
       cargar(); onCambio();
     } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
@@ -427,9 +448,21 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
     cargar(); onCambio();
   }
 
+  const [np, setNp] = useState({ nombre: "", precioVenta: "", stock: "" });
+  const [errorProducto, setErrorProducto] = useState("");
+  async function crearYVincularProducto(e: React.FormEvent) {
+    e.preventDefault(); setErrorProducto("");
+    try {
+      await api.post("/inventario", { negocioId, nombre: np.nombre, precioVenta: np.precioVenta, stock: np.stock || 0, loteId });
+      setNp({ nombre: "", precioVenta: "", stock: "" });
+      cargar(); onCambio();
+    } catch (err) { setErrorProducto(err instanceof ApiError ? err.message : t("common.error")); }
+  }
+
   const vinculadosIds = new Set(productosLote.map((p) => p.id));
   const disponiblesParaVincular = productosNegocio.filter((p) => !vinculadosIds.has(p.id));
   const tipoLabel = (value: string) => (TIPO_COSTO_KEY[value] ? t(TIPO_COSTO_KEY[value]) : value);
+  const tipoEventoLabel = (value: string) => (TIPO_EVENTO_KEY[value] ? t(TIPO_EVENTO_KEY[value]) : value);
 
   return (
     <div className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
@@ -536,9 +569,7 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
             <div><label>{t("agro.eventType")}</label>
               <select value={ev.tipo} onChange={(e) => setEv({ ...ev, tipo: e.target.value })}>
                 {tiposEvento.map((tv) => (
-                  <option key={tv} value={tv}>
-                    {tv === "vacuna" ? t("agro.eventVaccine") : tv === "tratamiento" ? t("agro.eventTreatment") : tv === "sintoma" ? t("agro.eventSymptom") : t("agro.eventOther")}
-                  </option>
+                  <option key={tv} value={tv}>{tipoEventoLabel(tv)}</option>
                 ))}
               </select>
             </div>
@@ -559,7 +590,7 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
                   <div>
                     <strong>{x.nombre}</strong>{" "}
                     <span className="muted small">
-                      · {x.tipo === "vacuna" ? t("agro.eventVaccine") : x.tipo === "tratamiento" ? t("agro.eventTreatment") : x.tipo === "sintoma" ? t("agro.eventSymptom") : t("agro.eventOther")}
+                      · {tipoEventoLabel(x.tipo)}
                       {x.diasRetiro != null && ` · ${t("agro.withdrawalDays").replace(" (opcional)", "").replace(" (optional)", "")}: ${x.diasRetiro}`}
                     </span>
                     <br /><span className="muted small">{fecha(x.fecha)}</span>
@@ -581,7 +612,19 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
                 {tiposCosto.map((tc) => <option key={tc.value} value={tc.value}>{tipoLabel(tc.value)}</option>)}
               </select>
             </div>
-            <div><label>{t("agro.amount")}</label><input type="number" step="0.01" min="0.01" value={c.monto} onChange={(e) => setC({ ...c, monto: e.target.value })} required /></div>
+            {c.tipoCosto === "feed" ? (
+              <>
+                <div><label>{t("agro.bagQty")}</label><input type="number" step="0.01" min="0" value={c.cantidadSacos} onChange={(e) => setC({ ...c, cantidadSacos: e.target.value })} placeholder={t("agro.bagQtyPh")} /></div>
+                <div><label>{t("agro.bagCost")}</label><input type="number" step="0.01" min="0" value={c.costoPorSaco} onChange={(e) => setC({ ...c, costoPorSaco: e.target.value })} placeholder="0.00" /></div>
+                {usaSacos ? (
+                  <p className="small muted" style={{ gridColumn: "1 / -1", margin: "-4px 0 0" }}>{t("agro.bagTotal")}: {money(totalSacos!)}</p>
+                ) : (
+                  <div><label>{t("agro.amount")}</label><input type="number" step="0.01" min="0.01" value={c.monto} onChange={(e) => setC({ ...c, monto: e.target.value })} required placeholder={t("agro.bagAmountFallback")} /></div>
+                )}
+              </>
+            ) : (
+              <div><label>{t("agro.amount")}</label><input type="number" step="0.01" min="0.01" value={c.monto} onChange={(e) => setC({ ...c, monto: e.target.value })} required /></div>
+            )}
             <div><label>{t("agro.date")}</label><input type="date" value={c.fecha} onChange={(e) => setC({ ...c, fecha: e.target.value })} required /></div>
             <div><label>{t("agro.descriptionOpt")}</label><input value={c.descripcion} onChange={(e) => setC({ ...c, descripcion: e.target.value })} placeholder={t("agro.descPh")} /></div>
             {error && <p className="error small" style={{ gridColumn: "1 / -1" }}>{error}</p>}
@@ -624,6 +667,18 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
               </select>
             </div>
           )}
+
+          <div className="card" style={{ background: "var(--surface)", marginTop: 12 }}>
+            <p className="small" style={{ margin: "0 0 8px" }}><strong>{t("agro.newProductTitle")}</strong></p>
+            <p className="muted small" style={{ margin: "0 0 8px" }}>{t("agro.newProductHelp")}</p>
+            <form onSubmit={crearYVincularProducto} className="grid grid-2">
+              <div><label>{t("agro.newProductName")}</label><input value={np.nombre} onChange={(e) => setNp({ ...np, nombre: e.target.value })} required placeholder={t("agro.newProductNamePh")} /></div>
+              <div><label>{t("agro.newProductPrice")}</label><input type="number" step="0.01" min="0" value={np.precioVenta} onChange={(e) => setNp({ ...np, precioVenta: e.target.value })} required placeholder="0.00" /></div>
+              <div><label>{t("agro.newProductStock")}</label><input type="number" step="0.01" min="0" value={np.stock} onChange={(e) => setNp({ ...np, stock: e.target.value })} placeholder="0" /></div>
+              {errorProducto && <p className="error small" style={{ gridColumn: "1 / -1" }}>{errorProducto}</p>}
+              <button className="primary" style={{ gridColumn: "1 / -1", marginTop: 4 }}>{t("agro.newProductCreate")}</button>
+            </form>
+          </div>
         </>
       )}
     </div>

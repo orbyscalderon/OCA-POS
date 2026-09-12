@@ -9,7 +9,7 @@ import { LINEAS_GENETICAS, getLineaGenetica, pesoEstandarEnEdad, hdpEstandarEnEd
 
 export const agroRouter = Router();
 
-const TIPOS_EVENTO_SANITARIO = ["vacuna", "tratamiento", "sintoma", "otro"] as const;
+const TIPOS_EVENTO_SANITARIO = ["vacuna", "vitamina", "tratamiento", "sintoma", "otro"] as const;
 
 const round2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
 

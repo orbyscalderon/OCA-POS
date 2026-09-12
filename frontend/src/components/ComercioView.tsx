@@ -630,10 +630,14 @@ function SaboresDeLinea({ negocioId, base, todos, onCambio }: { negocioId: strin
   const sabores = todos.filter((x) => x.id !== base.id && (x.varianteBaseId === baseId || x.id === baseId));
   const esLiquido = base.volumenMl != null && num(base.volumenMl) > 0;
   const vol = num(base.volumenMl);
-  // Productos ya existentes que se pueden vincular como sabor de esta línea: cualquier otro
-  // producto del negocio que todavía no sea parte de ESTA línea (y no sea la base ni un
-  // "padre" de otra línea distinta con sabores propios, para no anidar líneas).
-  const vinculables = todos.filter((x) => x.id !== base.id && x.varianteBaseId !== baseId && !todos.some((y) => y.varianteBaseId === x.id));
+  // Sabores = solo otros POTES líquidos (mismo tipo de producto que una recarga descuenta) —
+  // no cualquier producto del inventario. Tampoco uno que ya sea "padre" de otra línea propia,
+  // para no anidar líneas.
+  const vinculables = todos.filter((x) =>
+    x.id !== base.id && x.varianteBaseId !== baseId &&
+    x.volumenMl != null && num(x.volumenMl) > 0 &&
+    !todos.some((y) => y.varianteBaseId === x.id),
+  );
 
   const [nombre, setNombre] = useState("");
   const [precioVenta, setPrecioVenta] = useState(String(num(base.precioVenta)));
@@ -913,7 +917,11 @@ export function Productos({ negocio }: { negocio: Negocio }) {
                     <button type="button" className="ghost" onClick={() => setEditandoId(null)}>{t("common.cancel")}</button>
                   </div>
                 </form>
-                <SaboresDeLinea negocioId={negocio.id} base={p} todos={productos} onCambio={cargar} />
+                {/* Sabores solo aplica a recargas (potes líquidos) — no tiene sentido para
+                    hardware ni otros productos sin volumen. */}
+                {p.volumenMl != null && num(p.volumenMl) > 0 && (
+                  <SaboresDeLinea negocioId={negocio.id} base={p} todos={productos} onCambio={cargar} />
+                )}
               </div>
             );
           }

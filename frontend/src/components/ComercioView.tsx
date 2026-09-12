@@ -59,10 +59,6 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   const { t } = useT();
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<Producto[]>([]);
-  // Menú de sabores: en vez de tener que saber el nombre exacto del líquido y buscarlo, un
-  // botón muestra de una todos los sabores disponibles (como variantes de "Recarga") para
-  // elegir cuál vender.
-  const [mostrarSabores, setMostrarSabores] = useState(false);
   // Si se buscó/eligió la LÍNEA (ej. "Recargas", que no se vende directo) en vez de un sabor
   // puntual, primero hay que elegir cuál de sus sabores es — cada uno es un producto real.
   const [lineaSeleccionada, setLineaSeleccionada] = useState<Producto | null>(null);
@@ -127,7 +123,7 @@ function agregar(p: Producto) {
     // producto real, con su propio stock) antes de seguir con el tanque/ml.
     const saboresDeLaLinea = liquidos.filter((x) => x.varianteBaseId === p.id);
     if (saboresDeLaLinea.length > 0) {
-      setLineaSeleccionada(p); setBusqueda(""); setResultados([]); setMostrarSabores(false);
+      setLineaSeleccionada(p); setBusqueda(""); setResultados([]);
       return;
     }
     // Un líquido con volumen (ml) no se vende "1 unidad = el pote entero": se pregunta cuántos
@@ -244,15 +240,8 @@ function agregar(p: Producto) {
 
   return (
     <div>
-      <div className="row" style={{ gap: 8 }}>
-        <input ref={inputRef} placeholder={t("pos.searchPh")} value={busqueda}
-          onChange={(e) => setBusqueda(e.target.value)} onKeyDown={onEnter} autoFocus style={{ flex: 1 }} />
-        {liquidos.length > 0 && (
-          <button type="button" className={mostrarSabores ? "primary" : "ghost"} onClick={() => { setMostrarSabores((v) => !v); setBusqueda(""); setResultados([]); }}>
-            🥤 {t("pos.refillMenu")}
-          </button>
-        )}
-      </div>
+      <input ref={inputRef} placeholder={t("pos.searchPh")} value={busqueda}
+        onChange={(e) => setBusqueda(e.target.value)} onKeyDown={onEnter} autoFocus />
 
       {lineaSeleccionada && (
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 300, overflowY: "auto" }}>
@@ -272,31 +261,6 @@ function agregar(p: Producto) {
               <strong>{t("pos.refillCta")}</strong>
             </div>
           ))}
-        </div>
-      )}
-
-      {mostrarSabores && (
-        <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 300, overflowY: "auto" }}>
-          <strong className="small muted">{t("pos.refillMenuHint")}</strong>
-          {liquidos.filter((p) => !p.varianteBaseId).map((p) => {
-            const esLinea = liquidos.some((x) => x.varianteBaseId === p.id);
-            return (
-            <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => { agregar(p); if (!esLinea) setMostrarSabores(false); }}>
-              <div className="row" style={{ gap: 10 }}>
-                {p.imagenUrl && <img src={assetUrl(p.imagenUrl)} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />}
-                <div>
-                  <strong>{p.nombre}</strong><br />
-                  {esLinea ? (
-                    <span className="muted small">{t("pos.flavorLineHint")}</span>
-                  ) : (
-                    <span className="muted small">{t("pos.stock")}: {num(p.stock)} ml · {money(precioPorMl(p))}/ml</span>
-                  )}
-                </div>
-              </div>
-              <strong>{esLinea ? t("pos.flavorPickCta") : t("pos.refillCta")}</strong>
-            </div>
-            );
-          })}
         </div>
       )}
 

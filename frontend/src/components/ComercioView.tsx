@@ -904,7 +904,7 @@ export function Productos({ negocio }: { negocio: Negocio }) {
 
   return (
     <div>
-      <PerfilesDispositivo negocioId={negocio.id} />
+      {negocio.perfil === "vape_shop" && <PerfilesDispositivo negocioId={negocio.id} />}
       <div className="row spread" style={{ marginTop: 12 }}>
         <span className="muted small">{productos.length} {t("pos.products")}</span>
         <div className="row" style={{ gap: 8 }}>

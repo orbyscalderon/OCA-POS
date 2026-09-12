@@ -48,7 +48,9 @@ function iconoPerfil(ml: number): string {
 }
 
 // ---------- VENDER (POS) ----------
-interface LineaCarrito { productoId?: string; nombre: string; cantidad: number; precioUnit: number; impuestoPct: number }
+// `esRecarga`: esta línea es una recarga de líquido (cantidad = ml) — permite mostrar el
+// selector para cambiar de sabor sin tener que borrar la línea y volver a empezar.
+interface LineaCarrito { productoId?: string; nombre: string; cantidad: number; precioUnit: number; impuestoPct: number; esRecarga?: boolean }
 interface ClienteLite { id: string; nombre: string; telefono: string | null; saldoFiado: string | number }
 
 export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean }) {
@@ -79,6 +81,14 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   const [perfiles, setPerfiles] = useState<PerfilDispositivo[]>([]);
   useEffect(() => {
     api.get<{ perfiles: PerfilDispositivo[] }>(`/dispositivos?negocioId=${negocio.id}`).then((r) => setPerfiles(r.perfiles)).catch(() => {});
+  }, [negocio.id]);
+  // Todos los líquidos del negocio (productos con volumenMl) — para poder cambiar de sabor una
+  // recarga ya puesta en el carrito sin borrarla y volver a buscar desde cero.
+  const [liquidos, setLiquidos] = useState<Producto[]>([]);
+  useEffect(() => {
+    api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}`)
+      .then((r) => setLiquidos(r.productos.filter((p) => p.volumenMl != null && num(p.volumenMl) > 0)))
+      .catch(() => {});
   }, [negocio.id]);
 
   // Búsqueda de cliente para fiar la venta (solo si el rubro tiene el módulo de crédito).
@@ -145,12 +155,36 @@ function agregar(p: Producto) {
       cantidad: ml,
       precioUnit,
       impuestoPct: num(p.impuestoPct),
+      esRecarga: true,
     }]);
     setRecargaPendiente(null); setMlRecarga(""); setPrecioRecargaEditado(null); inputRef.current?.focus();
   }
 
   function setCant(i: number, cantidad: number) {
-    setCarrito((c) => c.map((l, k) => (k === i ? { ...l, cantidad: Math.max(0, cantidad) } : l)).filter((l) => l.cantidad > 0));
+    const nueva = Math.max(0, cantidad);
+    setCarrito((c) => c.map((l, k) => {
+      if (k !== i) return l;
+      // Si es una recarga, el nombre lleva los ml adentro ("Mango (4 ml)") — hay que
+      // actualizarlo para que no quede desincronizado del número real que se va a cobrar.
+      if (l.esRecarga) {
+        const base = liquidos.find((p) => p.id === l.productoId);
+        const nombreBase = base?.nombre ?? l.nombre.replace(/\s*\(\d+(\.\d+)?\s*ml\)$/, "");
+        return { ...l, cantidad: nueva, nombre: `${nombreBase} (${nueva} ml)` };
+      }
+      return { ...l, cantidad: nueva };
+    }).filter((l) => l.cantidad > 0));
+  }
+
+  // Cambia a qué líquido descuenta una recarga ya puesta en el carrito (se eligió mal el sabor)
+  // — mantiene los mismos ml, recalcula el precio proporcional al pote del nuevo líquido.
+  function cambiarSaborRecarga(i: number, nuevoProductoId: string) {
+    const nuevo = liquidos.find((p) => p.id === nuevoProductoId);
+    if (!nuevo) return;
+    setCarrito((c) => c.map((l, k) => {
+      if (k !== i) return l;
+      const precioUnit = precioPorMl(nuevo);
+      return { ...l, productoId: nuevo.id, nombre: `${nuevo.nombre} (${l.cantidad} ml)`, precioUnit, impuestoPct: num(nuevo.impuestoPct) };
+    }));
   }
 
   // Al escanear un código de barras, el lector "escribe" el código muy rápido y termina con
@@ -296,9 +330,19 @@ function agregar(p: Producto) {
       ) : (
         <div style={{ marginTop: 12 }}>
           {carrito.map((l, i) => (
-            <div className="list-item" key={i}>
-              <div style={{ flex: 1 }}>
-                <strong>{l.nombre}</strong><br /><span className="muted small">{money(l.precioUnit)} {t("pos.each")}{l.impuestoPct > 0 ? ` · ITBIS ${l.impuestoPct}%` : ""}</span>
+            <div className="list-item" key={i} style={{ flexWrap: "wrap" }}>
+              <div style={{ flex: 1, minWidth: 160 }}>
+                {l.esRecarga ? (
+                  <>
+                    <select value={l.productoId ?? ""} onChange={(e) => cambiarSaborRecarga(i, e.target.value)} style={{ marginBottom: 2 }}>
+                      {liquidos.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                    </select>
+                    <span className="muted small">{t("pos.refillFlavorHint")}</span>
+                  </>
+                ) : (
+                  <strong>{l.nombre}</strong>
+                )}
+                <br /><span className="muted small">{money(l.precioUnit)} {t("pos.each")}{l.impuestoPct > 0 ? ` · ITBIS ${l.impuestoPct}%` : ""}</span>
               </div>
               <input type="number" min="0" step="1" value={l.cantidad} onChange={(e) => setCant(i, Number(e.target.value))} style={{ width: 70 }} />
               <strong style={{ minWidth: 80, textAlign: "right" }}>{money(l.cantidad * l.precioUnit)}</strong>

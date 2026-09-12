@@ -101,7 +101,7 @@ model Negocio {
   // login normal, así un cajero con sesión iniciada no puede ver los reportes financieros sin
   // que el dueño/gerente ingrese este PIN. Null = todavía no configurado (panel bloqueado).
   pinContabilidadHash    String?           @map("pin_contabilidad_hash") @db.VarChar(255)
-  timezone               String            @default("Europe/Madrid") @db.VarChar(64)
+  timezone               String            @default("America/Santo_Domingo") @db.VarChar(64)
   // Geolocalización para búsqueda por cercanía.
   lat                    Float?
   lng                    Float?

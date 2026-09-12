@@ -33,6 +33,10 @@ interface Venta {
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const num = (n: number | string | null) => Number(n ?? 0);
 
+// Unidades de medida más comunes en un negocio dominicano — el que no calce elige "Otra" y
+// escribe la que necesite (ej. "QQ" quintal, "RACIMO", lo que sea propio de su rubro).
+const UNIDADES_COMUNES = ["UND", "LB", "KG", "G", "L", "ML", "M", "DOCENA", "CAJA", "PAR"];
+
 // Días que faltan para vencer (negativo = ya vencido). Comparación por fecha local, no UTC —
 // evita marcar como vencido algo que vence hoy mismo por diferencia de huso horario.
 function diasParaVencer(fecha: string): number {
@@ -108,11 +112,13 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
     return () => clearTimeout(t2);
   }, [credit, metodoPago, clienteQ, negocio.id]);
 
-  // Busca productos por nombre o código de barras (un escáner escribe el código + Enter).
+  // Sin nada escrito, muestra todo el catálogo (para que se vea de una qué hay para vender);
+  // al escribir, filtra por nombre/código/línea — útil cuando hay demasiados productos para
+  // desplazarse a mano. Un escáner escribe el código + Enter.
   useEffect(() => {
-    if (!busqueda.trim()) { setResultados([]); return; }
+    const q = busqueda.trim();
     const t2 = setTimeout(() => {
-      api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}&q=${encodeURIComponent(busqueda)}`)
+      api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}${q ? `&q=${encodeURIComponent(q)}` : ""}`)
         .then((r) => setResultados(r.productos)).catch(() => {});
     }, 200);
     return () => clearTimeout(t2);
@@ -515,12 +521,13 @@ function formDeProducto(p: Producto): FormProducto {
 // `incluirStockInicial` solo aplica al crear: al editar el stock se mueve con +Entrada/−Salida.
 // `otrosProductos` + `propioId`: para el selector "esto descuenta de" (recargas), excluyéndose
 // a sí mismo para no poder apuntar un producto a sí mismo como fuente.
-function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, propioId }: {
-  f: FormProducto; onChange: (f: FormProducto) => void; incluirStockInicial: boolean; otrosProductos: Producto[]; propioId?: string;
+function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, propioId, esVape }: {
+  f: FormProducto; onChange: (f: FormProducto) => void; incluirStockInicial: boolean; otrosProductos: Producto[]; propioId?: string; esVape: boolean;
 }) {
   const { t } = useT();
   const candidatosFuente = otrosProductos.filter((p) => p.id !== propioId && !p.productoFuenteId);
-  const vol = Number(f.volumenMl), costo = Number(f.costo), precio = Number(f.precioVenta);
+  const vol = esVape ? Number(f.volumenMl) : 0;
+  const costo = Number(f.costo), precio = Number(f.precioVenta);
   const margenPorMl = vol > 0 && f.costo && f.precioVenta ? (precio - costo) / vol : null;
   return (
     <>
@@ -530,16 +537,37 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
       <input value={f.sku} onChange={(e) => onChange({ ...f, sku: e.target.value })} />
       <label>{t("pos.categoryOpt")}</label>
       <input value={f.categoria} onChange={(e) => onChange({ ...f, categoria: e.target.value })} />
-      <label style={{ marginTop: 8 }}>{t("pos.productType")}</label>
-      <div className="lang-toggle" style={{ margin: "4px 0" }}>
-        <button type="button" className={f.tipoProducto === "consumible" ? "on" : ""} onClick={() => onChange({ ...f, tipoProducto: "consumible" })}>{t("pos.typeConsumable")}</button>
-        <button type="button" className={f.tipoProducto === "hardware" ? "on" : ""} onClick={() => onChange({ ...f, tipoProducto: "hardware" })}>{t("pos.typeHardware")}</button>
-      </div>
+      {esVape && (
+        <>
+          <label style={{ marginTop: 8 }}>{t("pos.productType")}</label>
+          <div className="lang-toggle" style={{ margin: "4px 0" }}>
+            <button type="button" className={f.tipoProducto === "consumible" ? "on" : ""} onClick={() => onChange({ ...f, tipoProducto: "consumible" })}>{t("pos.typeConsumable")}</button>
+            <button type="button" className={f.tipoProducto === "hardware" ? "on" : ""} onClick={() => onChange({ ...f, tipoProducto: "hardware" })}>{t("pos.typeHardware")}</button>
+          </div>
+        </>
+      )}
       <div className="grid grid-2">
         <div><label>{t("pos.salePrice")}</label><input type="number" step="0.01" min="0" value={f.precioVenta} onChange={(e) => onChange({ ...f, precioVenta: e.target.value })} required /></div>
         <div><label>{t("pos.cost")}</label><input type="number" step="0.01" min="0" value={f.costo} onChange={(e) => onChange({ ...f, costo: e.target.value })} placeholder="0.00" /></div>
         <div><label>{t("pos.taxPct")}</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => onChange({ ...f, impuestoPct: e.target.value })} /></div>
-        <div><label>{t("pos.volumeMl")}</label><input type="number" step="0.01" min="0" value={f.volumenMl} onChange={(e) => onChange({ ...f, volumenMl: e.target.value })} placeholder="30" /></div>
+        {!esVape && (
+          <div>
+            <label>{t("pos.unit")}</label>
+            <select
+              value={UNIDADES_COMUNES.includes(f.unidad) ? f.unidad : "OTRA"}
+              onChange={(e) => onChange({ ...f, unidad: e.target.value === "OTRA" ? "" : e.target.value })}
+            >
+              {UNIDADES_COMUNES.map((u) => <option key={u} value={u}>{u}</option>)}
+              <option value="OTRA">{t("pos.unitOther")}</option>
+            </select>
+            {!UNIDADES_COMUNES.includes(f.unidad) && (
+              <input style={{ marginTop: 6 }} value={f.unidad} onChange={(e) => onChange({ ...f, unidad: e.target.value })} placeholder={t("pos.unitPh")} autoFocus />
+            )}
+          </div>
+        )}
+        {esVape && (
+          <div><label>{t("pos.volumeMl")}</label><input type="number" step="0.01" min="0" value={f.volumenMl} onChange={(e) => onChange({ ...f, volumenMl: e.target.value })} placeholder="30" /></div>
+        )}
         {incluirStockInicial && (
           vol > 0 ? (
             <div>
@@ -553,7 +581,9 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
           )
         )}
         <div><label>{t("pos.minStock")}</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
-        <div><label>{t("pos.nicotineMg")}</label><input type="number" step="0.01" min="0" value={f.nicotinaMg} onChange={(e) => onChange({ ...f, nicotinaMg: e.target.value })} placeholder="6" /></div>
+        {esVape && (
+          <div><label>{t("pos.nicotineMg")}</label><input type="number" step="0.01" min="0" value={f.nicotinaMg} onChange={(e) => onChange({ ...f, nicotinaMg: e.target.value })} placeholder="6" /></div>
+        )}
       </div>
       {margenPorMl != null && (
         <p className="muted small">
@@ -566,8 +596,9 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
           volumen propio (ej. una "Recarga" genérica sin stock propio). Si el producto YA tiene
           su propio Volumen (ml) cargado arriba, es al revés: ES un pote — se vende por ml
           libre desde su propio stock, y sus sabores se vinculan desde "Sabores de esta línea"
-          en su pantalla de edición (no acá) — mostrar ambos a la vez solo confunde. */}
-      {candidatosFuente.length > 0 && vol === 0 && (
+          en su pantalla de edición (no acá) — mostrar ambos a la vez solo confunde. Es un
+          mecanismo específico de líquidos/vapes, no aplica a otros rubros. */}
+      {esVape && candidatosFuente.length > 0 && vol === 0 && (
         <>
           <label style={{ marginTop: 8 }}>{t("pos.sourceProduct")}</label>
           <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.sourceProductHelp")}</p>
@@ -584,9 +615,13 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
         </>
       )}
 
-      <label style={{ marginTop: 8 }}>{t("pos.technicalNotes")}</label>
-      <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.technicalNotesHelp")}</p>
-      <textarea rows={3} value={f.notasTecnicas} onChange={(e) => onChange({ ...f, notasTecnicas: e.target.value })} style={{ width: "100%" }} />
+      {esVape && (
+        <>
+          <label style={{ marginTop: 8 }}>{t("pos.technicalNotes")}</label>
+          <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.technicalNotesHelp")}</p>
+          <textarea rows={3} value={f.notasTecnicas} onChange={(e) => onChange({ ...f, notasTecnicas: e.target.value })} style={{ width: "100%" }} />
+        </>
+      )}
 
       <div className="grid grid-2" style={{ marginTop: 8 }}>
         <div><label>{t("pos.batchNumber")}</label><input value={f.loteNumero} onChange={(e) => onChange({ ...f, loteNumero: e.target.value })} /></div>
@@ -810,6 +845,7 @@ function PerfilesDispositivo({ negocioId }: { negocioId: string }) {
 
 export function Productos({ negocio }: { negocio: Negocio }) {
   const { t } = useT();
+  const esVape = negocio.perfil === "vape_shop";
   const [productos, setProductos] = useState<Producto[]>([]);
   const [nuevo, setNuevo] = useState(false);
   const [f, setF] = useState<FormProducto>(formVacio);
@@ -914,7 +950,7 @@ export function Productos({ negocio }: { negocio: Negocio }) {
       </div>
       {nuevo && (
         <form onSubmit={crear} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-          <CamposProducto f={f} onChange={setF} incluirStockInicial otrosProductos={productos} />
+          <CamposProducto f={f} onChange={setF} incluirStockInicial otrosProductos={productos} esVape={esVape} />
           {error && <p className="error small">{error}</p>}
           <button className="primary" style={{ marginTop: 10 }}>{t("pos.saveProduct")}</button>
         </form>
@@ -928,7 +964,7 @@ export function Productos({ negocio }: { negocio: Negocio }) {
             return (
               <div key={p.id}>
                 <form onSubmit={guardarEdicion} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-                  <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} otrosProductos={productos} propioId={p.id} />
+                  <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} otrosProductos={productos} propioId={p.id} esVape={esVape} />
                   <FotoProducto producto={p} onSubido={cargar} />
                   {error && <p className="error small">{error}</p>}
                   <div className="row" style={{ marginTop: 10 }}>

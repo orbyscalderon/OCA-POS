@@ -205,7 +205,10 @@ function metricas(lote: {
   }
   const enRetiro = fechaLibreRetiro != null && new Date(fechaLibreRetiro).getTime() > Date.now();
 
-  // ---- Costeo real: costo inicial del lote + todos los gastos atribuidos a él ----
+  // ---- Costeo real: todos los gastos atribuidos al lote ----
+  // El costo inicial (pollitos BB) YA está adentro de "gastos" (se crea como un Gasto más al
+  // crear el lote, para que aparezca desglosado junto al resto) — sumarlo de nuevo acá lo
+  // duplicaba (1000 pollitos a $40 c/u aparecían como $80,000 en vez de $40,000).
   const costoPorTipo: Record<string, number> = {};
   let costoGastos = 0;
   for (const g of lote.gastos) {
@@ -215,7 +218,7 @@ function metricas(lote: {
     costoPorTipo[tipo] = round2((costoPorTipo[tipo] ?? 0) + monto);
   }
   const costoInicial = Number(lote.costoInicial ?? 0);
-  const costoTotal = round2(costoInicial + costoGastos);
+  const costoTotal = round2(costoGastos);
   const costoPorAve = lote.cantidadInicial > 0 ? round2(costoTotal / lote.cantidadInicial) : 0;
   const costoPorKg = biomasaKg && biomasaKg > 0 ? round2(costoTotal / biomasaKg) : null;
 

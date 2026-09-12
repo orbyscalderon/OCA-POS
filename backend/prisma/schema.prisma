@@ -155,14 +155,20 @@ model Negocio {
 //  MÓDULO: COMPRAS (reposición de inventario desde proveedores)
 // ============================================================
 model Compra {
-  id        String        @id @default(cuid())
-  negocioId String        @map("negocio_id")
-  negocio   Negocio       @relation(fields: [negocioId], references: [id], onDelete: Cascade)
-  proveedor String?       @db.VarChar(120)
-  total     Decimal       @db.Decimal(12, 2)
-  fecha     DateTime
-  createdAt DateTime      @default(now()) @map("created_at")
-  lineas    LineaCompra[]
+  id         String        @id @default(cuid())
+  negocioId  String        @map("negocio_id")
+  negocio    Negocio       @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  proveedor  String?       @db.VarChar(120)
+  total      Decimal       @db.Decimal(12, 2)
+  fecha      DateTime
+  // "pendiente" = orden de compra guardada, todavía no sumó stock ni tocó el costo del
+  // producto; "recibida" = ya entró al inventario (al crearla directo, o al recibir una
+  // pendiente). Antes solo existía el registro inmediato — esto separa "pedí esto" de
+  // "esto ya llegó", para poder guardar la orden y recibirla después.
+  estado     String        @default("recibida") @db.VarChar(12)
+  recibidaEn DateTime?     @map("recibida_en")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  lineas     LineaCompra[]
 
   @@index([negocioId])
   @@map("compras")

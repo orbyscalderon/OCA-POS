@@ -113,9 +113,14 @@ const dict = {
   "compras.total": { es: "Total", en: "Total" },
   "compras.needLine": { es: "Agrega al menos una línea.", en: "Add at least one line." },
   "compras.registered": { es: "Compra registrada y stock actualizado.", en: "Purchase logged and stock updated." },
-  "compras.registerBtn": { es: "Registrar compra", en: "Log purchase" },
+  "compras.registerBtn": { es: "Registrar recibida ahora", en: "Log as received now" },
   "compras.recent": { es: "Compras recientes", en: "Recent purchases" },
   "compras.items": { es: "ítems", en: "items" },
+  "compras.saveOrderBtn": { es: "Guardar orden de compra", en: "Save purchase order" },
+  "compras.orderHelp": { es: "\"Guardar orden\" la deja pendiente (no suma stock todavía) — cuando el pedido llegue, se recibe y ahí entra al inventario. \"Registrar recibida ahora\" es para una compra que ya te estás llevando.", en: "\"Save order\" leaves it pending (doesn't add stock yet) — when the order arrives, receive it and it enters inventory then. \"Log as received now\" is for a purchase you're taking with you right away." },
+  "compras.orderSaved": { es: "Orden de compra guardada. Vas a poder recibirla cuando llegue.", en: "Purchase order saved. You'll be able to receive it when it arrives." },
+  "compras.pending": { es: "Órdenes pendientes de recibir", en: "Orders pending receipt" },
+  "compras.receive": { es: "📦 Recibir", en: "📦 Receive" },
 
   // Módulo Mesas / Comandas
   "mesas.title": { es: "🍽️ Mesas y comandas", en: "🍽️ Tables and orders" },

@@ -592,7 +592,12 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
         </p>
       )}
 
-      {candidatosFuente.length > 0 && (
+      {/* Este mecanismo viejo (una sola fuente, un ML fijo por venta) es para un producto SIN
+          volumen propio (ej. una "Recarga" genérica sin stock propio). Si el producto YA tiene
+          su propio Volumen (ml) cargado arriba, es al revés: ES un pote — se vende por ml
+          libre desde su propio stock, y sus sabores se vinculan desde "Sabores de esta línea"
+          en su pantalla de edición (no acá) — mostrar ambos a la vez solo confunde. */}
+      {candidatosFuente.length > 0 && vol === 0 && (
         <>
           <label style={{ marginTop: 8 }}>{t("pos.sourceProduct")}</label>
           <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.sourceProductHelp")}</p>

@@ -368,6 +368,8 @@ const dict = {
   "pos.refillMl": { es: "¿Cuántos ml se lleva el cliente?", en: "How many ml is the customer taking?" },
   "pos.refillTank": { es: "Tamaño del tanque", en: "Tank size" },
   "pos.refillFlavorHint": { es: " ← elegí de qué pote descuenta", en: " ← pick which bottle it deducts from" },
+  "pos.refillMenu": { es: "Sabores", en: "Flavors" },
+  "pos.refillMenuHint": { es: "Elegí el sabor que vas a vender — se descuenta del pote correspondiente.", en: "Pick the flavor you're selling — it deducts from the matching bottle." },
   "pos.refillMlCustom": { es: "O ingresá los ml exactos", en: "Or enter the exact ml" },
   "pos.productType": { es: "Tipo de producto", en: "Product type" },
   "pos.typeConsumable": { es: "Consumible", en: "Consumable" },

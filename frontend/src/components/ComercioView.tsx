@@ -57,6 +57,10 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   const { t } = useT();
   const [busqueda, setBusqueda] = useState("");
   const [resultados, setResultados] = useState<Producto[]>([]);
+  // Menú de sabores: en vez de tener que saber el nombre exacto del líquido y buscarlo, un
+  // botón muestra de una todos los sabores disponibles (como variantes de "Recarga") para
+  // elegir cuál vender.
+  const [mostrarSabores, setMostrarSabores] = useState(false);
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [metodoPago, setMetodoPago] = useState("efectivo");
   const [clienteQ, setClienteQ] = useState("");
@@ -227,8 +231,34 @@ function agregar(p: Producto) {
 
   return (
     <div>
-      <input ref={inputRef} placeholder={t("pos.searchPh")} value={busqueda}
-        onChange={(e) => setBusqueda(e.target.value)} onKeyDown={onEnter} autoFocus />
+      <div className="row" style={{ gap: 8 }}>
+        <input ref={inputRef} placeholder={t("pos.searchPh")} value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)} onKeyDown={onEnter} autoFocus style={{ flex: 1 }} />
+        {liquidos.length > 0 && (
+          <button type="button" className={mostrarSabores ? "primary" : "ghost"} onClick={() => { setMostrarSabores((v) => !v); setBusqueda(""); setResultados([]); }}>
+            🥤 {t("pos.refillMenu")}
+          </button>
+        )}
+      </div>
+
+      {mostrarSabores && (
+        <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 300, overflowY: "auto" }}>
+          <strong className="small muted">{t("pos.refillMenuHint")}</strong>
+          {liquidos.map((p) => (
+            <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => { agregar(p); setMostrarSabores(false); }}>
+              <div className="row" style={{ gap: 10 }}>
+                {p.imagenUrl && <img src={assetUrl(p.imagenUrl)} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />}
+                <div>
+                  <strong>{p.nombre}</strong><br />
+                  <span className="muted small">{t("pos.stock")}: {num(p.stock)} ml · {money(precioPorMl(p))}/ml</span>
+                </div>
+              </div>
+              <strong>{t("pos.refillCta")}</strong>
+            </div>
+          ))}
+        </div>
+      )}
+
       {resultados.length > 0 && (
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 220, overflowY: "auto" }}>
           {resultados.map((p) => {

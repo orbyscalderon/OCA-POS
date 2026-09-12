@@ -10,7 +10,7 @@ interface Compra { id: string; proveedor: string | null; total: string | number;
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const hoy = hoyLocal;
 
-export function ComprasView({ negocio }: { negocio: Negocio }) {
+export function ComprasView({ negocio, puedeCrear = true, puedeEliminar = true }: { negocio: Negocio; puedeCrear?: boolean; puedeEliminar?: boolean }) {
   const { t } = useT();
   const [productos, setProductos] = useState<Producto[]>([]);
   const [compras, setCompras] = useState<Compra[]>([]);
@@ -20,6 +20,8 @@ export function ComprasView({ negocio }: { negocio: Negocio }) {
   const [l, setL] = useState({ productoId: "", nombre: "", cantidad: "1", costoUnit: "" });
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
+
+  async function borrar(id: string) { await api.del(`/compras/${id}`); cargar(); }
 
   function cargar() {
     api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}`).then((r) => setProductos(r.productos)).catch(() => {});
@@ -48,6 +50,7 @@ export function ComprasView({ negocio }: { negocio: Negocio }) {
   return (
     <div className="card">
       <h2>{t("compras.title")}</h2>
+      {puedeCrear && (
       <form onSubmit={guardar}>
         <div className="grid grid-2">
           <div><label>{t("compras.supplier")}</label><input value={proveedor} onChange={(e) => setProveedor(e.target.value)} /></div>
@@ -80,12 +83,16 @@ export function ComprasView({ negocio }: { negocio: Negocio }) {
         {msg && <p className="success small">{msg}</p>}
         <button className="primary" style={{ width: "100%", marginTop: 10 }} disabled={lineas.length === 0}>{t("compras.registerBtn")}</button>
       </form>
+      )}
 
       {compras.length > 0 && (
         <div style={{ marginTop: 14 }}>
           <strong className="small">{t("compras.recent")}</strong>
           {compras.slice(0, 8).map((c) => (
-            <div className="list-item" key={c.id}><span className="muted small">{formatFechaLocal(c.fecha)} · {c.proveedor ?? "—"} · {c.lineas.length} {t("compras.items")}</span><strong>{money(c.total)}</strong></div>
+            <div className="list-item" key={c.id}>
+              <span className="muted small">{formatFechaLocal(c.fecha)} · {c.proveedor ?? "—"} · {c.lineas.length} {t("compras.items")}</span>
+              <div className="row"><strong>{money(c.total)}</strong>{puedeEliminar && <button type="button" className="ghost small" onClick={() => borrar(c.id)}>✕</button>}</div>
+            </div>
           ))}
         </div>
       )}

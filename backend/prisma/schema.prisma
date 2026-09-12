@@ -69,59 +69,59 @@ model Usuario {
   createdAt         DateTime  @default(now()) @map("created_at")
 
   // Relaciones
-  negociosPropios  Negocio[]           @relation("DuenoNegocio")
-  membresias       PeluqueroEquipo[]
-  membresiasNegocio MiembroNegocio[]
-  servicios        Servicio[]
-  disponibilidades Disponibilidad[]
-  bloqueosAgenda   Bloqueo[]
-  reservasComoCliente   Reservacion[]  @relation("ClienteReserva")
-  reservasComoPeluquero Reservacion[]  @relation("PeluqueroReserva")
-  tokensReset      PasswordResetToken[]
-  tokensEmail      EmailVerificationToken[]
-  refreshTokens    RefreshToken[]
-  resenas          Resena[]
+  negociosPropios       Negocio[]                @relation("DuenoNegocio")
+  membresias            PeluqueroEquipo[]
+  membresiasNegocio     MiembroNegocio[]
+  servicios             Servicio[]
+  disponibilidades      Disponibilidad[]
+  bloqueosAgenda        Bloqueo[]
+  reservasComoCliente   Reservacion[]            @relation("ClienteReserva")
+  reservasComoPeluquero Reservacion[]            @relation("PeluqueroReserva")
+  tokensReset           PasswordResetToken[]
+  tokensEmail           EmailVerificationToken[]
+  refreshTokens         RefreshToken[]
+  resenas               Resena[]
 
   @@map("usuarios")
 }
 
 model Negocio {
-  id                String            @id @default(cuid())
-  nombreComercial   String            @map("nombre_comercial") @db.VarChar(150)
-  slug              String            @unique
+  id                     String            @id @default(cuid())
+  nombreComercial        String            @map("nombre_comercial") @db.VarChar(150)
+  slug                   String            @unique
   // Categoría del negocio (barbería, estética, spa, uñas, etc.). Plataforma multi-rubro.
-  categoria         String            @default("barberia") @db.VarChar(40)
+  categoria              String            @default("barberia") @db.VarChar(40)
   // Rubro/perfil del motor de nicho (barberia, restaurante, supermercado…). Activa sus módulos.
-  perfil            String?           @db.VarChar(40)
-  direccion         String            @db.Text
-  telefonoContacto  String            @map("telefono_contacto") @db.VarChar(20)
-  logoUrl           String?           @map("logo_url") @db.VarChar(255)
-  coverUrl          String?           @map("cover_url") @db.VarChar(255)
+  perfil                 String?           @db.VarChar(40)
+  direccion              String            @db.Text
+  telefonoContacto       String            @map("telefono_contacto") @db.VarChar(20)
+  logoUrl                String?           @map("logo_url") @db.VarChar(255)
+  coverUrl               String?           @map("cover_url") @db.VarChar(255)
   // PIN de acceso al panel de Contabilidad (gastos/impuestos/compras/analítica): separado del
   // login normal, así un cajero con sesión iniciada no puede ver los reportes financieros sin
   // que el dueño/gerente ingrese este PIN. Null = todavía no configurado (panel bloqueado).
-  pinContabilidadHash String?         @map("pin_contabilidad_hash") @db.VarChar(255)
-  timezone          String            @default("Europe/Madrid") @db.VarChar(64)
+  pinContabilidadHash    String?           @map("pin_contabilidad_hash") @db.VarChar(255)
+  timezone               String            @default("Europe/Madrid") @db.VarChar(64)
   // Geolocalización para búsqueda por cercanía.
-  lat               Float?
-  lng               Float?
+  lat                    Float?
+  lng                    Float?
   // Reputación agregada (se recalcula al crear reseñas).
-  ratingPromedio    Float             @default(0) @map("rating_promedio")
-  ratingConteo      Int               @default(0) @map("rating_conteo")
-  estadoSuscripcion EstadoSuscripcion @default(prueba) @map("estado_suscripcion")
-  plan              String?           @db.VarChar(20) // basico | pro
-  intervaloPlan     String?           @map("intervalo_plan") @db.VarChar(10) // mensual | anual
-  suscripcionHasta  DateTime?         @map("suscripcion_hasta")
+  ratingPromedio         Float             @default(0) @map("rating_promedio")
+  ratingConteo           Int               @default(0) @map("rating_conteo")
+  estadoSuscripcion      EstadoSuscripcion @default(prueba) @map("estado_suscripcion")
+  plan                   String?           @db.VarChar(20) // basico | pro
+  intervaloPlan          String?           @map("intervalo_plan") @db.VarChar(10) // mensual | anual
+  suscripcionHasta       DateTime?         @map("suscripcion_hasta")
   // IDs de la pasarela para el cobro mensual del SaaS.
-  stripeCustomerId     String?        @map("stripe_customer_id") @db.VarChar(255)
-  stripeSubscriptionId String?        @map("stripe_subscription_id") @db.VarChar(255)
+  stripeCustomerId       String?           @map("stripe_customer_id") @db.VarChar(255)
+  stripeSubscriptionId   String?           @map("stripe_subscription_id") @db.VarChar(255)
   // Stripe Connect: cuenta del negocio para recibir su parte de la fianza.
-  stripeConnectAccountId String?      @map("stripe_connect_account_id") @db.VarChar(255)
-  cobrosActivos          Boolean      @default(false) @map("cobros_activos") // onboarding completo
-  payoutInterval         String?      @map("payout_interval") @db.VarChar(10) // daily|weekly|monthly (null = por defecto)
-  payoutAnchor           Int?         @map("payout_anchor") // día del mes (monthly)
-  duenoId           Int               @map("dueno_id")
-  createdAt         DateTime          @default(now()) @map("created_at")
+  stripeConnectAccountId String?           @map("stripe_connect_account_id") @db.VarChar(255)
+  cobrosActivos          Boolean           @default(false) @map("cobros_activos") // onboarding completo
+  payoutInterval         String?           @map("payout_interval") @db.VarChar(10) // daily|weekly|monthly (null = por defecto)
+  payoutAnchor           Int?              @map("payout_anchor") // día del mes (monthly)
+  duenoId                Int               @map("dueno_id")
+  createdAt              DateTime          @default(now()) @map("created_at")
 
   // Fidelización (módulo loyalty): cuántos puntos otorga cada venta y cuántos hacen falta
   // para el premio (ej. "cada 10 recargas, la próxima gratis" = 1 punto por venta, 10 para el
@@ -129,23 +129,23 @@ model Negocio {
   puntosPorVenta   Int @default(1) @map("puntos_por_venta")
   puntosParaPremio Int @default(10) @map("puntos_para_premio")
 
-  dueno        Usuario             @relation("DuenoNegocio", fields: [duenoId], references: [id], onDelete: Cascade)
-  equipo       PeluqueroEquipo[]
-  miembros     MiembroNegocio[]
-  invitaciones InvitacionNegocio[]
-  resenas      Resena[]
-  prestamos    Prestamo[]
-  productos    Producto[]
+  dueno               Usuario             @relation("DuenoNegocio", fields: [duenoId], references: [id], onDelete: Cascade)
+  equipo              PeluqueroEquipo[]
+  miembros            MiembroNegocio[]
+  invitaciones        InvitacionNegocio[]
+  resenas             Resena[]
+  prestamos           Prestamo[]
+  productos           Producto[]
   perfilesDispositivo PerfilDispositivo[]
-  ventas       Venta[]
-  sesionesCaja SesionCaja[]
-  lotesAgro    LoteBiologico[]
-  mesas        Mesa[]
-  comandas     Comanda[]
-  ordenesServicio OrdenServicio[]
-  gastos       Gasto[]
-  clientes     ClienteNegocio[]
-  compras      Compra[]
+  ventas              Venta[]
+  sesionesCaja        SesionCaja[]
+  lotesAgro           LoteBiologico[]
+  mesas               Mesa[]
+  comandas            Comanda[]
+  ordenesServicio     OrdenServicio[]
+  gastos              Gasto[]
+  clientes            ClienteNegocio[]
+  compras             Compra[]
 
   @@index([estadoSuscripcion])
   @@map("negocios")
@@ -206,19 +206,19 @@ model Gasto {
 }
 
 model ClienteNegocio {
-  id        String   @id @default(cuid())
-  negocioId String   @map("negocio_id")
-  negocio   Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
-  nombre    String   @db.VarChar(120)
-  telefono  String?  @db.VarChar(20)
-  email     String?  @db.VarChar(150)
-  direccion String?  @db.VarChar(200)
-  notas     String?  @db.VarChar(300)
+  id         String   @id @default(cuid())
+  negocioId  String   @map("negocio_id")
+  negocio    Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  nombre     String   @db.VarChar(120)
+  telefono   String?  @db.VarChar(20)
+  email      String?  @db.VarChar(150)
+  direccion  String?  @db.VarChar(200)
+  notas      String?  @db.VarChar(300)
   // Fidelización: puntos/sellos acumulados (módulo loyalty).
-  puntos    Int      @default(0)
+  puntos     Int      @default(0)
   // Fiado / crédito abierto (módulo credit): cuánto le debe este cliente al negocio.
-  saldoFiado Decimal @default(0) @map("saldo_fiado") @db.Decimal(12, 2)
-  createdAt DateTime @default(now()) @map("created_at")
+  saldoFiado Decimal  @default(0) @map("saldo_fiado") @db.Decimal(12, 2)
+  createdAt  DateTime @default(now()) @map("created_at")
 
   ventas Venta[]
 
@@ -230,18 +230,18 @@ model ClienteNegocio {
 //  MÓDULO: AGRO (granja avícola: lotes biológicos)
 // ============================================================
 model LoteBiologico {
-  id              String         @id @default(cuid())
-  negocioId       String         @map("negocio_id")
-  negocio         Negocio        @relation(fields: [negocioId], references: [id], onDelete: Cascade)
-  nombre          String         @db.VarChar(120)
-  especie         String         @default("broiler") @db.VarChar(20) // broiler | layer
-  tipoProduccion  String         @default("meat") @map("tipo_produccion") @db.VarChar(20) // meat | eggs
-  cantidadInicial Int            @map("cantidad_inicial")
-  fechaInicio     DateTime       @map("fecha_inicio")
-  costoInicial    Decimal?       @map("costo_inicial") @db.Decimal(12, 2)
-  estado          String         @default("activo") @db.VarChar(10) // activo | cerrado
-  notas           String?        @db.Text
-  createdAt       DateTime       @default(now()) @map("created_at")
+  id              String   @id @default(cuid())
+  negocioId       String   @map("negocio_id")
+  negocio         Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  nombre          String   @db.VarChar(120)
+  especie         String   @default("broiler") @db.VarChar(20) // broiler | layer
+  tipoProduccion  String   @default("meat") @map("tipo_produccion") @db.VarChar(20) // meat | eggs
+  cantidadInicial Int      @map("cantidad_inicial")
+  fechaInicio     DateTime @map("fecha_inicio")
+  costoInicial    Decimal? @map("costo_inicial") @db.Decimal(12, 2)
+  estado          String   @default("activo") @db.VarChar(10) // activo | cerrado
+  notas           String?  @db.Text
+  createdAt       DateTime @default(now()) @map("created_at")
 
   registros RegistroAgro[]
   gastos    Gasto[]
@@ -362,12 +362,12 @@ model Producto {
 
   // Trazabilidad de lote/vencimiento (farmacia, panadería y cualquier perecedero). Opcional —
   // un producto sin fecha simplemente no entra en la alerta de "por vencer".
-  loteNumero        String?   @map("lote_numero") @db.VarChar(60)
-  fechaVencimiento  DateTime? @map("fecha_vencimiento") @db.Date
+  loteNumero       String?   @map("lote_numero") @db.VarChar(60)
+  fechaVencimiento DateTime? @map("fecha_vencimiento") @db.Date
 
   // Hardware (dispositivos, se vende una vez) vs consumible (líquidos/resistencias, el
   // cliente vuelve a comprar seguido) — separa el inventario para poder mirarlos aparte.
-  tipoProducto String @default("consumible") @map("tipo_producto") @db.VarChar(20)
+  tipoProducto  String  @default("consumible") @map("tipo_producto") @db.VarChar(20)
   // Asesoría técnica para el personal al vender (ej. "sales de nicotina: solo con pods
   // pequeños, no en atomizadores grandes") — se muestra en el mostrador al agregarlo al carrito.
   notasTecnicas String? @map("notas_tecnicas") @db.Text
@@ -377,13 +377,13 @@ model Producto {
   // rendimientoPorVenta = cuánto se descuenta del producto fuente por cada unidad vendida de
   // ESTE producto (p. ej. 3 = 3ml por recarga vendida), para que el cálculo de lo que queda
   // en el pote sea correcto sin tener que llevar dos inventarios separados a mano.
-  productoFuenteId    String?  @map("producto_fuente_id")
+  productoFuenteId    String?    @map("producto_fuente_id")
   productoFuente      Producto?  @relation("ProductoFuente", fields: [productoFuenteId], references: [id], onDelete: SetNull)
-  rendimientoPorVenta Decimal? @map("rendimiento_por_venta") @db.Decimal(8, 3)
+  rendimientoPorVenta Decimal?   @map("rendimiento_por_venta") @db.Decimal(8, 3)
   recargas            Producto[] @relation("ProductoFuente")
 
-  movimientos MovimientoStock[]
-  lineasVenta LineaVenta[]
+  movimientos  MovimientoStock[]
+  lineasVenta  LineaVenta[]
   lineasCompra LineaCompra[]
 
   @@index([negocioId])
@@ -438,24 +438,24 @@ model SesionCaja {
 }
 
 model Venta {
-  id           String      @id @default(cuid())
-  negocioId    String      @map("negocio_id")
-  negocio      Negocio     @relation(fields: [negocioId], references: [id], onDelete: Cascade)
-  subtotal     Decimal     @default(0) @db.Decimal(12, 2)
-  impuesto     Decimal     @default(0) @db.Decimal(12, 2)
-  total        Decimal     @db.Decimal(12, 2)
-  metodoPago   String      @default("efectivo") @map("metodo_pago") @db.VarChar(20)
-  sesionCajaId String?     @map("sesion_caja_id")
-  sesionCaja   SesionCaja? @relation(fields: [sesionCajaId], references: [id])
+  id              String          @id @default(cuid())
+  negocioId       String          @map("negocio_id")
+  negocio         Negocio         @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  subtotal        Decimal         @default(0) @db.Decimal(12, 2)
+  impuesto        Decimal         @default(0) @db.Decimal(12, 2)
+  total           Decimal         @db.Decimal(12, 2)
+  metodoPago      String          @default("efectivo") @map("metodo_pago") @db.VarChar(20)
+  sesionCajaId    String?         @map("sesion_caja_id")
+  sesionCaja      SesionCaja?     @relation(fields: [sesionCajaId], references: [id])
   // Cliente al que se le fía esta venta (obligatorio cuando metodoPago = "fiado").
-  clienteId    String?         @map("cliente_id")
-  cliente      ClienteNegocio? @relation(fields: [clienteId], references: [id])
-  createdAt    DateTime    @default(now()) @map("created_at")
+  clienteId       String?         @map("cliente_id")
+  cliente         ClienteNegocio? @relation(fields: [clienteId], references: [id])
+  createdAt       DateTime        @default(now()) @map("created_at")
   // Anulación: la venta queda como registro histórico (no se borra) pero se marca inválida,
   // se revierte el stock y el saldo/puntos del cliente si tenía.
-  anulada          Boolean   @default(false)
-  anuladaEn        DateTime? @map("anulada_en")
-  motivoAnulacion  String?   @map("motivo_anulacion") @db.VarChar(200)
+  anulada         Boolean         @default(false)
+  anuladaEn       DateTime?       @map("anulada_en")
+  motivoAnulacion String?         @map("motivo_anulacion") @db.VarChar(200)
 
   lineas LineaVenta[]
 
@@ -528,16 +528,17 @@ model CuotaPrestamo {
 
 // Link de invitación único para que un peluquero se una a un negocio sin buscarlo.
 model InvitacionNegocio {
-  id        Int       @id @default(autoincrement())
-  negocioId String    @map("negocio_id")
-  token     String    @unique @db.VarChar(64)
-  expiraEn  DateTime  @map("expira_en")
-  usadaPor  Int?      @map("usada_por") // usuarioId del peluquero que la usó
-  usadaEn   DateTime? @map("usada_en")
-  createdAt DateTime  @default(now()) @map("created_at")
-  // Si se define, al aceptar la invitación el usuario entra como miembro del negocio
-  // con este rol funcional (cajero/inventario/contador/gerente) en vez de como peluquero.
-  rolAsignado String? @map("rol_asignado") @db.VarChar(20)
+  id                Int       @id @default(autoincrement())
+  negocioId         String    @map("negocio_id")
+  token             String    @unique @db.VarChar(64)
+  expiraEn          DateTime  @map("expira_en")
+  usadaPor          Int?      @map("usada_por") // usuarioId del peluquero que la usó
+  usadaEn           DateTime? @map("usada_en")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  // Si se define, al aceptar la invitación el usuario entra como miembro del negocio con
+  // esta etiqueta de plantilla y estos permisos granulares, en vez de como peluquero.
+  rolAsignado       String?   @map("rol_asignado") @db.VarChar(20)
+  permisosAsignados String[]  @default([]) @map("permisos_asignados")
 
   negocio Negocio @relation(fields: [negocioId], references: [id], onDelete: Cascade)
 
@@ -581,7 +582,12 @@ model MiembroNegocio {
   id        String   @id @default(cuid())
   negocioId String   @map("negocio_id")
   usuarioId Int      @map("usuario_id")
-  rol       String   @default("cajero") @db.VarChar(20) // gerente | cajero | inventario | contador
+  // Etiqueta de plantilla (gerente/cajero/inventario/contador/personalizado) — solo para
+  // mostrar un nombre corto en la UI. El acceso real lo decide `permisos`, no este campo.
+  rol       String   @default("cajero") @db.VarChar(20)
+  // Permisos granulares concedidos a este miembro (ver Permiso en lib/acceso.ts): cada función
+  // del sistema (vender, crear cliente, eliminar compra...) se otorga por separado.
+  permisos  String[] @default([])
   activo    Boolean  @default(true)
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -604,7 +610,7 @@ model Servicio {
   activo          Boolean  @default(true)
   createdAt       DateTime @default(now()) @map("created_at")
 
-  peluquero    Usuario       @relation(fields: [peluqueroId], references: [id], onDelete: Cascade)
+  peluquero     Usuario       @relation(fields: [peluqueroId], references: [id], onDelete: Cascade)
   reservaciones Reservacion[]
 
   @@index([peluqueroId])
@@ -617,7 +623,7 @@ model Disponibilidad {
   peluqueroId Int       @map("peluquero_id")
   dia         DiaSemana
   horaInicio  String    @map("hora_inicio") @db.VarChar(5) // "HH:MM"
-  horaFin     String    @map("hora_fin") @db.VarChar(5)    // "HH:MM"
+  horaFin     String    @map("hora_fin") @db.VarChar(5) // "HH:MM"
 
   peluquero Usuario @relation(fields: [peluqueroId], references: [id], onDelete: Cascade)
 
@@ -626,24 +632,24 @@ model Disponibilidad {
 }
 
 model Reservacion {
-  id                  Int        @id @default(autoincrement())
-  clienteId           Int        @map("cliente_id")
-  peluqueroId         Int        @map("peluquero_id")
-  servicioId          Int        @map("servicio_id")
-  fecha               DateTime   @db.Date
-  horaInicio          String     @map("hora_inicio") @db.VarChar(5) // "HH:MM"
-  horaFin             String     @map("hora_fin") @db.VarChar(5)    // "HH:MM"
-  pagoReservaStatus   EstadoPago @default(pendiente) @map("pago_reserva_status")
-  estadoCita          EstadoCita @default(confirmada) @map("estado_cita")
-  idTransaccionPasarela String?  @map("id_transaccion_pasarela") @db.VarChar(255)
-  idReembolsoPasarela String?    @map("id_reembolso_pasarela") @db.VarChar(255)
+  id                    Int        @id @default(autoincrement())
+  clienteId             Int        @map("cliente_id")
+  peluqueroId           Int        @map("peluquero_id")
+  servicioId            Int        @map("servicio_id")
+  fecha                 DateTime   @db.Date
+  horaInicio            String     @map("hora_inicio") @db.VarChar(5) // "HH:MM"
+  horaFin               String     @map("hora_fin") @db.VarChar(5) // "HH:MM"
+  pagoReservaStatus     EstadoPago @default(pendiente) @map("pago_reserva_status")
+  estadoCita            EstadoCita @default(confirmada) @map("estado_cita")
+  idTransaccionPasarela String?    @map("id_transaccion_pasarela") @db.VarChar(255)
+  idReembolsoPasarela   String?    @map("id_reembolso_pasarela") @db.VarChar(255)
   // Token corto aleatorio para validar la cita en el local (NO usar el id secuencial)
-  codigoValidacion    String     @unique @map("codigo_validacion") @db.VarChar(12)
+  codigoValidacion      String     @unique @map("codigo_validacion") @db.VarChar(12)
   // Vencimiento del hold del slot si el pago no se confirma (lo libera el job de expiración).
-  expiraPagoEn        DateTime?  @map("expira_pago_en")
+  expiraPagoEn          DateTime?  @map("expira_pago_en")
   // Marca de recordatorio enviado (evita duplicados del job de recordatorios).
-  recordatorioEnviadoEn DateTime? @map("recordatorio_enviado_en")
-  createdAt           DateTime   @default(now()) @map("created_at")
+  recordatorioEnviadoEn DateTime?  @map("recordatorio_enviado_en")
+  createdAt             DateTime   @default(now()) @map("created_at")
 
   cliente   Usuario  @relation("ClienteReserva", fields: [clienteId], references: [id])
   peluquero Usuario  @relation("PeluqueroReserva", fields: [peluqueroId], references: [id])
@@ -679,7 +685,7 @@ model Resena {
   clienteId     Int      @map("cliente_id")
   peluqueroId   Int      @map("peluquero_id")
   negocioId     String   @map("negocio_id")
-  puntuacion    Int      // 1..5
+  puntuacion    Int // 1..5
   comentario    String?  @db.VarChar(500)
   createdAt     DateTime @default(now()) @map("created_at")
 

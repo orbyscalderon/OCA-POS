@@ -67,7 +67,7 @@ uploadsRouter.post(
     if (!req.file) throw BadRequest("Falta la imagen (campo 'imagen', jpg/png/webp, máx 3MB)");
     const producto = await prisma.producto.findUnique({ where: { id: req.params.productoId } });
     if (!producto) throw NotFound("Producto no encontrado");
-    await requireAcceso(producto.negocioId, req.user!.sub, req.user!.rol, "inventario");
+    await requireAcceso(producto.negocioId, req.user!.sub, req.user!.rol, ["inventario.crear", "inventario.editar"]);
 
     const imagenUrl = await guardarArchivo(req.file);
     await prisma.producto.update({ where: { id: producto.id }, data: { imagenUrl } });

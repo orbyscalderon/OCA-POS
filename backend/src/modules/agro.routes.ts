@@ -102,7 +102,7 @@ const INCLUDE_LOTE = {
 
 agroRouter.get("/lotes", requireAuth, asyncHandler(async (req, res) => {
   const negocioId = z.string().min(1).parse(req.query.negocioId);
-  await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const lotes = await prisma.loteBiologico.findMany({
     where: { negocioId },
     include: INCLUDE_LOTE,
@@ -118,7 +118,7 @@ agroRouter.get("/lotes", requireAuth, asyncHandler(async (req, res) => {
 
 agroRouter.post("/lotes", requireAuth, asyncHandler(async (req, res) => {
   const d = loteSchema.parse(req.body);
-  await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const lote = await prisma.loteBiologico.create({
     data: {
       negocioId: d.negocioId, nombre: d.nombre, especie: d.especie, tipoProduccion: d.tipoProduccion,
@@ -150,7 +150,7 @@ agroRouter.get("/lotes/:id", requireAuth, asyncHandler(async (req, res) => {
     },
   });
   if (!lote) throw NotFound("Lote no encontrado");
-  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   res.json({ lote, metricas: metricas(lote), tiposCosto: TIPOS_COSTO.map((v) => ({ value: v, label: ETIQUETA_TIPO_COSTO[v] })) });
 }));
 
@@ -168,7 +168,7 @@ agroRouter.post("/lotes/:id/registros", requireAuth, asyncHandler(async (req, re
   const d = registroSchema.parse(req.body);
   const lote = await prisma.loteBiologico.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
   if (!lote) throw NotFound("Lote no encontrado");
-  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const fecha = new Date(`${d.fecha}T00:00:00`);
   const registro = await prisma.registroAgro.upsert({
     where: { loteId_fecha: { loteId: req.params.id, fecha } },
@@ -181,7 +181,7 @@ agroRouter.post("/lotes/:id/registros", requireAuth, asyncHandler(async (req, re
 agroRouter.post("/lotes/:id/cerrar", requireAuth, asyncHandler(async (req, res) => {
   const lote = await prisma.loteBiologico.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
   if (!lote) throw NotFound("Lote no encontrado");
-  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const actualizado = await prisma.loteBiologico.update({ where: { id: req.params.id }, data: { estado: "cerrado" } });
   res.json({ lote: actualizado });
 }));
@@ -198,7 +198,7 @@ agroRouter.post("/lotes/:id/costos", requireAuth, asyncHandler(async (req, res) 
   const d = costoSchema.parse(req.body);
   const lote = await prisma.loteBiologico.findUnique({ where: { id: req.params.id }, select: { negocioId: true, nombre: true } });
   if (!lote) throw NotFound("Lote no encontrado");
-  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const gasto = await prisma.gasto.create({
     data: {
       negocioId: lote.negocioId, loteId: req.params.id, tipoCosto: d.tipoCosto,
@@ -213,7 +213,7 @@ agroRouter.post("/lotes/:id/costos", requireAuth, asyncHandler(async (req, res) 
 agroRouter.delete("/lotes/:id/costos/:costoId", requireAuth, asyncHandler(async (req, res) => {
   const lote = await prisma.loteBiologico.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
   if (!lote) throw NotFound("Lote no encontrado");
-  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   await prisma.gasto.deleteMany({ where: { id: req.params.costoId, loteId: req.params.id } });
   res.json({ ok: true });
 }));
@@ -222,7 +222,7 @@ agroRouter.delete("/lotes/:id/costos/:costoId", requireAuth, asyncHandler(async 
 agroRouter.post("/lotes/:id/productos/:productoId", requireAuth, asyncHandler(async (req, res) => {
   const lote = await prisma.loteBiologico.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
   if (!lote) throw NotFound("Lote no encontrado");
-  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const producto = await prisma.producto.findUnique({ where: { id: req.params.productoId }, select: { negocioId: true } });
   if (!producto || producto.negocioId !== lote.negocioId) throw NotFound("Producto no encontrado");
   await prisma.producto.update({ where: { id: req.params.productoId }, data: { loteId: req.params.id } });
@@ -232,7 +232,7 @@ agroRouter.post("/lotes/:id/productos/:productoId", requireAuth, asyncHandler(as
 agroRouter.delete("/lotes/:id/productos/:productoId", requireAuth, asyncHandler(async (req, res) => {
   const lote = await prisma.loteBiologico.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
   if (!lote) throw NotFound("Lote no encontrado");
-  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro");
+  await requireAcceso(lote.negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const producto = await prisma.producto.findUnique({ where: { id: req.params.productoId }, select: { negocioId: true, loteId: true } });
   if (!producto || producto.negocioId !== lote.negocioId) throw NotFound("Producto no encontrado");
   if (producto.loteId !== req.params.id) throw BadRequest("Ese producto no está vinculado a este lote");

@@ -9,7 +9,7 @@ const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const hoy = hoyLocal;
 const mesActual = () => hoyLocal().slice(0, 7);
 
-export function GastosView({ negocio }: { negocio: Negocio }) {
+export function GastosView({ negocio, puedeCrear = true, puedeEliminar = true }: { negocio: Negocio; puedeCrear?: boolean; puedeEliminar?: boolean }) {
   const { t } = useT();
   const [gastos, setGastos] = useState<Gasto[]>([]);
   const [total, setTotal] = useState(0);
@@ -38,18 +38,20 @@ export function GastosView({ negocio }: { negocio: Negocio }) {
       <div className="card" style={{ background: "var(--surface-2)" }}>
         <div className="row spread"><strong>{t("gastos.totalMonth")}</strong><span className="grad-text" style={{ fontWeight: 800 }}>{money(total)}</span></div>
       </div>
-      <form onSubmit={crear} className="grid grid-2" style={{ marginTop: 10 }}>
-        <div><label>{t("gastos.description")}</label><input value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.target.value })} required /></div>
-        <div><label>{t("gastos.category")}</label><input value={f.categoria} onChange={(e) => setF({ ...f, categoria: e.target.value })} placeholder={t("gastos.categoryPh")} /></div>
-        <div><label>{t("gastos.amount")}</label><input type="number" step="0.01" min="0" value={f.monto} onChange={(e) => setF({ ...f, monto: e.target.value })} required /></div>
-        <div><label>{t("gastos.date")}</label><input type="date" value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} required /></div>
-        <button className="primary" style={{ gridColumn: "1 / -1" }}>{t("gastos.add")}</button>
-      </form>
+      {puedeCrear && (
+        <form onSubmit={crear} className="grid grid-2" style={{ marginTop: 10 }}>
+          <div><label>{t("gastos.description")}</label><input value={f.descripcion} onChange={(e) => setF({ ...f, descripcion: e.target.value })} required /></div>
+          <div><label>{t("gastos.category")}</label><input value={f.categoria} onChange={(e) => setF({ ...f, categoria: e.target.value })} placeholder={t("gastos.categoryPh")} /></div>
+          <div><label>{t("gastos.amount")}</label><input type="number" step="0.01" min="0" value={f.monto} onChange={(e) => setF({ ...f, monto: e.target.value })} required /></div>
+          <div><label>{t("gastos.date")}</label><input type="date" value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} required /></div>
+          <button className="primary" style={{ gridColumn: "1 / -1" }}>{t("gastos.add")}</button>
+        </form>
+      )}
       {error && <p className="error small">{error}</p>}
       {gastos.map((g) => (
         <div className="list-item" key={g.id}>
           <div><strong>{g.descripcion}</strong> {g.categoria ? <span className="muted small">· {g.categoria}</span> : null}<br /><span className="muted small">{formatFechaLocal(g.fecha)}</span></div>
-          <div className="row"><strong>{money(g.monto)}</strong><button className="ghost small" onClick={() => borrar(g.id)}>✕</button></div>
+          <div className="row"><strong>{money(g.monto)}</strong>{puedeEliminar && <button className="ghost small" onClick={() => borrar(g.id)}>✕</button>}</div>
         </div>
       ))}
       {gastos.length === 0 && <p className="muted small" style={{ marginTop: 8 }}>{t("gastos.empty")}</p>}

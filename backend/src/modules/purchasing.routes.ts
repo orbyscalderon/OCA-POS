@@ -1,19 +1,13 @@
 import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
-import { Forbidden, NotFound } from "../lib/errors.js";
+import { NotFound } from "../lib/errors.js";
 import { asyncHandler } from "../middleware/errorHandler.js";
-import { requireAuth, requireRole } from "../middleware/auth.js";
+import { requireAuth } from "../middleware/auth.js";
+import { requireAcceso } from "../lib/acceso.js";
 
 export const purchasingRouter = Router();
 const round2 = (x: number) => Math.round((x + Number.EPSILON) * 100) / 100;
-
-async function assertDueno(negocioId: string, userId: number, rol: string) {
-  if (rol === "superadmin") return;
-  const n = await prisma.negocio.findUnique({ where: { id: negocioId }, select: { duenoId: true } });
-  if (!n) throw NotFound("Negocio no encontrado");
-  if (n.duenoId !== userId) throw Forbidden("Este negocio no es tuyo");
-}
 
 const compraSchema = z.object({
   negocioId: z.string().min(1),
@@ -28,9 +22,9 @@ const compraSchema = z.object({
 });
 
 // Registra una compra y SUMA stock a los productos vinculados (entrada al ledger).
-purchasingRouter.post("/", requireAuth, requireRole("admin_negocio"), asyncHandler(async (req, res) => {
+purchasingRouter.post("/", requireAuth, asyncHandler(async (req, res) => {
   const d = compraSchema.parse(req.body);
-  await assertDueno(d.negocioId, req.user!.sub, req.user!.rol);
+  await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "compras.crear");
   const total = round2(d.lineas.reduce((s, l) => s + l.cantidad * l.costoUnit, 0));
 
   const compra = await prisma.$transaction(async (tx) => {
@@ -51,9 +45,27 @@ purchasingRouter.post("/", requireAuth, requireRole("admin_negocio"), asyncHandl
   res.status(201).json({ compra });
 }));
 
-purchasingRouter.get("/", requireAuth, requireRole("admin_negocio"), asyncHandler(async (req, res) => {
+purchasingRouter.get("/", requireAuth, asyncHandler(async (req, res) => {
   const negocioId = z.string().min(1).parse(req.query.negocioId);
-  await assertDueno(negocioId, req.user!.sub, req.user!.rol);
+  await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "compras.ver");
   const compras = await prisma.compra.findMany({ where: { negocioId }, include: { lineas: true }, orderBy: { fecha: "desc" }, take: 100 });
   res.json({ compras });
+}));
+
+// Elimina una compra y revierte el stock que había sumado (no se intenta reconstruir el costo
+// anterior del producto — no queda historial de ese dato — solo la cantidad).
+purchasingRouter.delete("/:id", requireAuth, asyncHandler(async (req, res) => {
+  const c = await prisma.compra.findUnique({ where: { id: req.params.id }, include: { lineas: true } });
+  if (!c) throw NotFound("Compra no encontrada");
+  await requireAcceso(c.negocioId, req.user!.sub, req.user!.rol, "compras.eliminar");
+
+  await prisma.$transaction(async (tx) => {
+    for (const l of c.lineas) {
+      if (!l.productoId) continue;
+      await tx.producto.update({ where: { id: l.productoId }, data: { stock: { decrement: l.cantidad } } });
+      await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "ajuste", cantidad: -Math.abs(Number(l.cantidad)), motivo: `Eliminación compra ${c.id.slice(-6)}` } });
+    }
+    await tx.compra.delete({ where: { id: c.id } }); // cascada borra las líneas
+  });
+  res.json({ ok: true });
 }));

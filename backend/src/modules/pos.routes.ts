@@ -23,7 +23,7 @@ posRouter.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const negocioId = z.string().min(1).parse(req.query.negocioId);
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "caja");
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "ventas.caja");
     const sesion = await prisma.sesionCaja.findFirst({ where: { negocioId, estado: "abierta" }, orderBy: { abiertaEn: "desc" } });
     res.json({ sesion });
   }),
@@ -34,7 +34,7 @@ posRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const { negocioId, montoInicial } = z.object({ negocioId: z.string().min(1), montoInicial: z.coerce.number().min(0) }).parse(req.body);
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "caja");
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "ventas.caja");
     const sesion = await prisma.$transaction(async (tx) => {
       // Bloquea el negocio antes de comprobar: dos "abrir caja" concurrentes no deben
       // pasar ambos el chequeo y crear dos sesiones abiertas a la vez.
@@ -52,7 +52,7 @@ posRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const { negocioId, montoFinal } = z.object({ negocioId: z.string().min(1), montoFinal: z.coerce.number().min(0) }).parse(req.body);
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "caja");
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "ventas.caja");
     const sesion = await prisma.sesionCaja.findFirst({ where: { negocioId, estado: "abierta" } });
     if (!sesion) throw BadRequest("No hay caja abierta");
     const ventas = await prisma.venta.findMany({ where: { sesionCajaId: sesion.id, metodoPago: "efectivo" }, select: { total: true } });
@@ -89,7 +89,7 @@ posRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const d = ventaSchema.parse(req.body);
-    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "pos");
+    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "ventas.vender");
     if ((d.metodoPago === "fiado" || d.metodoPago === "apartado") && !d.clienteId) {
       throw BadRequest("Esta venta requiere elegir un cliente", "SIN_CLIENTE");
     }
@@ -176,7 +176,7 @@ posRouter.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const negocioId = z.string().min(1).parse(req.query.negocioId);
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "pos");
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, ["ventas.vender", "ventas.caja"]);
     const { desde, hasta } = rangoDia(typeof req.query.fecha === "string" ? req.query.fecha : undefined);
     const ventas = await prisma.venta.findMany({
       where: { negocioId, createdAt: { gte: desde, lt: hasta } },
@@ -194,7 +194,8 @@ posRouter.get(
 // Anular una venta: revierte el stock (y el de recargas, en el producto fuente), el saldo
 // fiado/apartado y los puntos de fidelidad si el cliente los había recibido por esta venta.
 // No se borra el registro — queda marcado como anulado para el historial y las auditorías.
-// Solo dueño o gerente: un cajero no debe poder borrar sus propias ventas del reporte de caja.
+// Requiere el permiso "ventas.anular" a propósito, separado de "ventas.vender": el dueño
+// decide a quién le da esta función aparte — no todo el que puede cobrar puede anular.
 const anularSchema = z.object({ motivo: z.string().max(200).optional() });
 posRouter.post(
   "/ventas/:id/anular",
@@ -203,8 +204,7 @@ posRouter.post(
     const { motivo } = anularSchema.parse(req.body);
     const venta = await prisma.venta.findUnique({ where: { id: req.params.id }, include: { lineas: true } });
     if (!venta) throw NotFound("Venta no encontrada");
-    const rol = await requireAcceso(venta.negocioId, req.user!.sub, req.user!.rol, "pos");
-    if (rol !== "dueno" && rol !== "gerente") throw BadRequest("Solo el dueño o un gerente puede anular una venta", "SIN_PERMISO");
+    await requireAcceso(venta.negocioId, req.user!.sub, req.user!.rol, "ventas.anular");
     if (venta.anulada) throw Conflict("Esta venta ya estaba anulada", "YA_ANULADA");
 
     const idsProductos = venta.lineas.map((l) => l.productoId).filter(Boolean) as string[];

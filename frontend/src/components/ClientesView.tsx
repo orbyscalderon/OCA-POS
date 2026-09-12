@@ -6,13 +6,19 @@ import { useT } from "../i18n";
 interface Cliente { id: string; nombre: string; telefono: string | null; email: string | null; direccion: string | null; notas: string | null; puntos: number; saldoFiado: string | number }
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 
-export function ClientesView({ negocio, loyalty = false, credit = false }: { negocio: Negocio; loyalty?: boolean; credit?: boolean }) {
+export function ClientesView({ negocio, loyalty = false, credit = false, puedeEditar = true, puedeEliminar = true }: { negocio: Negocio; loyalty?: boolean; credit?: boolean; puedeEditar?: boolean; puedeEliminar?: boolean }) {
   const { t } = useT();
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [q, setQ] = useState("");
   const [nuevo, setNuevo] = useState(false);
   const [f, setF] = useState({ nombre: "", telefono: "", email: "", direccion: "", notas: "" });
   const [error, setError] = useState("");
+
+  async function eliminar(c: Cliente) {
+    if (!confirm(`${t("clientes.deleteConfirm")} ${c.nombre}?`)) return;
+    try { await api.del(`/clientes/${c.id}`); cargar(); }
+    catch (err) { alert(err instanceof ApiError ? err.message : t("common.error")); }
+  }
 
   function cargar() {
     api.get<{ clientes: Cliente[] }>(`/clientes?negocioId=${negocio.id}${q ? `&q=${encodeURIComponent(q)}` : ""}`).then((r) => setClientes(r.clientes)).catch(() => {});
@@ -44,7 +50,7 @@ export function ClientesView({ negocio, loyalty = false, credit = false }: { neg
     <div className="card">
       <div className="row spread">
         <h2>{t("clientes.title")}</h2>
-        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => setNuevo((v) => !v)}>{nuevo ? t("common.cancel") : t("clientes.newCustomer")}</button>
+        {puedeEditar && <button className={nuevo ? "ghost small" : "primary small"} onClick={() => setNuevo((v) => !v)}>{nuevo ? t("common.cancel") : t("clientes.newCustomer")}</button>}
       </div>
       {nuevo && (
         <form onSubmit={crear} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
@@ -77,6 +83,7 @@ export function ClientesView({ negocio, loyalty = false, credit = false }: { neg
                   {c.puntos >= paraPremio && <button className="primary small" onClick={() => canjear(c)}>{t("clientes.redeem")}</button>}
                 </>
               )}
+              {puedeEliminar && <button className="ghost small" onClick={() => eliminar(c)}>✕</button>}
             </div>
           </div>
         );

@@ -11,7 +11,7 @@ import { paginationSchema, paginar, metaPaginacion } from "../lib/pagination.js"
 import { calcularSplitFianza } from "../lib/split.js";
 import { limitePeluqueros, limiteNegocios } from "../lib/planes.js";
 import { SLUGS_PERFIL } from "../config/perfiles.js";
-import { requireAcceso, ROLES_ASIGNABLES } from "../lib/acceso.js";
+import { requireAcceso, ROLES_ASIGNABLES, PLANTILLAS, PERMISOS_CONTABILIDAD, permisoSchema } from "../lib/acceso.js";
 import { hashPassword, verifyPassword } from "../lib/auth.js";
 import { enviarEmail, emailSolicitudFuncion } from "../lib/email.js";
 
@@ -122,12 +122,12 @@ negociosRouter.get(
       }),
       prisma.miembroNegocio.findMany({
         where: { usuarioId, activo: true },
-        select: { rol: true, negocio: { select: CAMPOS_NEGOCIO_MIO } },
+        select: { rol: true, permisos: true, negocio: { select: CAMPOS_NEGOCIO_MIO } },
       }),
     ]);
     const negocios = [
       ...propios.map((n) => ({ ...n, miRol: "dueno" as const })),
-      ...comoMiembro.map((m) => ({ ...m.negocio, miRol: m.rol })),
+      ...comoMiembro.map((m) => ({ ...m.negocio, miRol: m.rol, misPermisos: m.permisos })),
     ];
     res.json({ negocios });
   }),
@@ -415,8 +415,9 @@ negociosRouter.patch(
 // ---------- Admin genera un link de invitación único ----------
 const crearInvitacionSchema = z.object({
   // Si se omite: invitación al equipo de peluqueros (módulo de citas), como antes.
-  // Si se define: invitación a personal con ese rol funcional (cajero/inventario/contador/gerente).
+  // Si se define: invitación a personal con esa etiqueta y esos permisos granulares.
   rol: z.enum(ROLES_ASIGNABLES).optional(),
+  permisos: z.array(permisoSchema).optional(),
 });
 
 negociosRouter.post(
@@ -424,12 +425,14 @@ negociosRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const negocioId = req.params.id;
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "equipo");
-    const { rol } = crearInvitacionSchema.parse(req.body ?? {});
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "equipo.crear");
+    const { rol, permisos } = crearInvitacionSchema.parse(req.body ?? {});
 
     const token = randomBytes(24).toString("base64url");
     const expiraEn = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 días
-    await prisma.invitacionNegocio.create({ data: { negocioId, token, expiraEn, rolAsignado: rol ?? null } });
+    await prisma.invitacionNegocio.create({
+      data: { negocioId, token, expiraEn, rolAsignado: rol ?? null, permisosAsignados: permisos ?? [] },
+    });
 
     res.status(201).json({
       token,
@@ -476,9 +479,10 @@ negociosRouter.post(
           where: { negocioId_usuarioId: { negocioId: inv.negocioId, usuarioId } },
         });
         if (existente?.activo) throw Conflict("Ya perteneces a este negocio", "YA_MIEMBRO");
+        const permisos = inv.permisosAsignados;
         const membresia = existente
-          ? await tx.miembroNegocio.update({ where: { id: existente.id }, data: { rol: inv.rolAsignado, activo: true } })
-          : await tx.miembroNegocio.create({ data: { negocioId: inv.negocioId, usuarioId, rol: inv.rolAsignado } });
+          ? await tx.miembroNegocio.update({ where: { id: existente.id }, data: { rol: inv.rolAsignado, permisos, activo: true } })
+          : await tx.miembroNegocio.create({ data: { negocioId: inv.negocioId, usuarioId, rol: inv.rolAsignado, permisos } });
         await tx.invitacionNegocio.update({ where: { id: inv.id }, data: { usadaPor: usuarioId, usadaEn: new Date() } });
         return { tipo: "equipo" as const, membresia };
       }
@@ -523,13 +527,13 @@ negociosRouter.get(
   "/:id/miembros",
   requireAuth,
   asyncHandler(async (req, res) => {
-    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo");
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo.ver");
     const miembros = await prisma.miembroNegocio.findMany({
       where: { negocioId: req.params.id },
-      select: { id: true, rol: true, activo: true, createdAt: true, usuario: { select: { id: true, nombre: true, email: true, telefono: true } } },
+      select: { id: true, rol: true, permisos: true, activo: true, createdAt: true, usuario: { select: { id: true, nombre: true, email: true, telefono: true } } },
       orderBy: { createdAt: "asc" },
     });
-    res.json({ miembros, rolesAsignables: ROLES_ASIGNABLES });
+    res.json({ miembros, rolesAsignables: ROLES_ASIGNABLES, plantillas: PLANTILLAS });
   }),
 );
 
@@ -541,7 +545,10 @@ const crearMiembroDirectoSchema = z.object({
   email: z.string().email().max(150),
   telefono: z.string().min(6).max(20),
   password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres"),
-  rol: z.enum(ROLES_ASIGNABLES),
+  // Etiqueta de plantilla (solo para mostrar) + los permisos granulares elegidos función por
+  // función — "rol" ya no determina el acceso, es puramente informativo.
+  rol: z.string().min(1).max(20).default("personalizado"),
+  permisos: z.array(permisoSchema).default([]),
 });
 
 negociosRouter.post(
@@ -549,7 +556,7 @@ negociosRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const negocioId = req.params.id;
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "equipo");
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "equipo.crear");
     const d = crearMiembroDirectoSchema.parse(req.body);
 
     const existe = await prisma.usuario.findUnique({ where: { email: d.email } });
@@ -568,7 +575,7 @@ negociosRouter.post(
         },
       });
       const miembro = await tx.miembroNegocio.create({
-        data: { negocioId, usuarioId: usuario.id, rol: d.rol },
+        data: { negocioId, usuarioId: usuario.id, rol: d.rol, permisos: d.permisos },
       });
       return { usuario, miembro };
     });
@@ -580,7 +587,8 @@ negociosRouter.post(
 );
 
 const actualizarMiembroSchema = z.object({
-  rol: z.enum(ROLES_ASIGNABLES).optional(),
+  rol: z.string().min(1).max(20).optional(),
+  permisos: z.array(permisoSchema).optional(),
   activo: z.boolean().optional(),
 });
 
@@ -588,7 +596,7 @@ negociosRouter.patch(
   "/:id/miembros/:miembroId",
   requireAuth,
   asyncHandler(async (req, res) => {
-    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo");
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo.editar");
     const d = actualizarMiembroSchema.parse(req.body);
     const m = await prisma.miembroNegocio.findUnique({ where: { id: req.params.miembroId } });
     if (!m || m.negocioId !== req.params.id) throw NotFound("Miembro no encontrado");
@@ -601,7 +609,7 @@ negociosRouter.delete(
   "/:id/miembros/:miembroId",
   requireAuth,
   asyncHandler(async (req, res) => {
-    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo");
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "equipo.eliminar");
     const m = await prisma.miembroNegocio.findUnique({ where: { id: req.params.miembroId } });
     if (!m || m.negocioId !== req.params.id) throw NotFound("Miembro no encontrado");
     await prisma.miembroNegocio.delete({ where: { id: m.id } });
@@ -728,7 +736,7 @@ negociosRouter.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const negocioId = req.params.id;
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "reportes");
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "reportes.ver");
 
     const dias = Math.min(365, Math.max(1, Number(req.query.dias) || 30));
     const desde = new Date(Date.now() - dias * 24 * 60 * 60 * 1000);
@@ -794,7 +802,7 @@ negociosRouter.get(
   "/:id/pin-contabilidad",
   requireAuth,
   asyncHandler(async (req, res) => {
-    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "gastos");
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, PERMISOS_CONTABILIDAD);
     const negocio = await prisma.negocio.findUnique({
       where: { id: req.params.id },
       select: { pinContabilidadHash: true },
@@ -846,7 +854,7 @@ negociosRouter.post(
   "/:id/pin-contabilidad/verificar",
   requireAuth,
   asyncHandler(async (req, res) => {
-    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, "gastos");
+    await requireAcceso(req.params.id, req.user!.sub, req.user!.rol, PERMISOS_CONTABILIDAD);
     const { pin } = pinSchema.parse(req.body);
     const negocio = await prisma.negocio.findUnique({
       where: { id: req.params.id },

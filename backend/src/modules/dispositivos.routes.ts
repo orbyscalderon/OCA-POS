@@ -24,7 +24,8 @@ dispositivosRouter.get(
   requireAuth,
   asyncHandler(async (req, res) => {
     const negocioId = z.string().min(1).parse(req.query.negocioId);
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "inventario");
+    // La venta también los usa (botones rápidos de ml al vender una recarga).
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, ["ventas.vender", "inventario.ver"]);
 
     let perfiles = await prisma.perfilDispositivo.findMany({ where: { negocioId }, orderBy: { capacidadMl: "asc" } });
     if (perfiles.length === 0) {
@@ -48,7 +49,7 @@ dispositivosRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const d = perfilSchema.parse(req.body);
-    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "inventario");
+    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "inventario.editar");
     const perfil = await prisma.perfilDispositivo.create({ data: d });
     res.status(201).json({ perfil });
   }),
@@ -60,7 +61,7 @@ dispositivosRouter.patch(
   asyncHandler(async (req, res) => {
     const p = await prisma.perfilDispositivo.findUnique({ where: { id: req.params.id } });
     if (!p) throw NotFound("Perfil no encontrado");
-    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario");
+    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario.editar");
     const d = perfilSchema.omit({ negocioId: true }).partial().parse(req.body);
     const perfil = await prisma.perfilDispositivo.update({ where: { id: p.id }, data: d });
     res.json({ perfil });
@@ -73,7 +74,7 @@ dispositivosRouter.delete(
   asyncHandler(async (req, res) => {
     const p = await prisma.perfilDispositivo.findUnique({ where: { id: req.params.id } });
     if (!p) throw NotFound("Perfil no encontrado");
-    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario");
+    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario.editar");
     await prisma.perfilDispositivo.delete({ where: { id: p.id } });
     res.json({ ok: true });
   }),

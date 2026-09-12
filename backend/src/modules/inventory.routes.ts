@@ -45,17 +45,22 @@ async function assertProductoFuenteValido(negocioId: string, productoFuenteId: s
   if (!fuente || fuente.negocioId !== negocioId) throw BadRequest("El producto fuente no pertenece a este negocio", "PRODUCTO_FUENTE_INVALIDO");
 }
 
-// Listar productos de un negocio.
+// Listar productos de un negocio. La venta también busca acá (para elegir qué vender), así
+// que basta con poder vender O ver inventario — no hace falta el permiso completo de gestión.
+// Por defecto excluye los desactivados (no se pueden vender); Inventario pide ?todos=1 para
+// poder verlos y reactivarlos.
 inventoryRouter.get(
   "/",
   requireAuth,
   asyncHandler(async (req, res) => {
     const negocioId = z.string().min(1).parse(req.query.negocioId);
-    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "inventario");
+    await requireAcceso(negocioId, req.user!.sub, req.user!.rol, ["ventas.vender", "inventario.ver"]);
     const q = typeof req.query.q === "string" ? req.query.q : undefined;
+    const todos = req.query.todos === "1";
     const productos = await prisma.producto.findMany({
       where: {
         negocioId,
+        ...(todos ? {} : { activo: true }),
         ...(q ? { OR: [{ nombre: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }] } : {}),
       },
       orderBy: { nombre: "asc" },
@@ -70,7 +75,7 @@ inventoryRouter.post(
   requireAuth,
   asyncHandler(async (req, res) => {
     const d = productoSchema.parse(req.body);
-    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "inventario");
+    await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "inventario.crear");
     if (d.productoFuenteId) await assertProductoFuenteValido(d.negocioId, d.productoFuenteId);
     const producto = await prisma.producto.create({
       data: {
@@ -98,11 +103,26 @@ inventoryRouter.patch(
   asyncHandler(async (req, res) => {
     const p = await prisma.producto.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
     if (!p) throw NotFound("Producto no encontrado");
-    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario");
-    const d = productoSchema.partial().omit({ negocioId: true, stock: true }).parse(req.body);
+    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario.editar");
+    const d = productoSchema.partial().omit({ negocioId: true, stock: true }).extend({ activo: z.boolean().optional() }).parse(req.body);
     if (d.productoFuenteId) await assertProductoFuenteValido(p.negocioId, d.productoFuenteId);
     const producto = await prisma.producto.update({ where: { id: req.params.id }, data: d });
     res.json({ producto });
+  }),
+);
+
+// "Eliminar" un producto = desactivarlo (no se borra la fila: queda historial de ventas que
+// lo referencian). Deja de aparecer para vender; Inventario lo sigue mostrando (con ?todos=1)
+// para poder reactivarlo si fue un error.
+inventoryRouter.delete(
+  "/:id",
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    const p = await prisma.producto.findUnique({ where: { id: req.params.id }, select: { negocioId: true } });
+    if (!p) throw NotFound("Producto no encontrado");
+    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario.eliminar");
+    await prisma.producto.update({ where: { id: req.params.id }, data: { activo: false } });
+    res.json({ ok: true });
   }),
 );
 
@@ -119,7 +139,7 @@ inventoryRouter.post(
     const d = stockSchema.parse(req.body);
     const p = await prisma.producto.findUnique({ where: { id: req.params.id } });
     if (!p) throw NotFound("Producto no encontrado");
-    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario");
+    await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario.editar");
 
     // Delta aplicado con `increment` (atómico en la BD): dos ajustes/ventas concurrentes
     // sobre el mismo producto no se pisan entre sí (evita perder movimientos de stock).

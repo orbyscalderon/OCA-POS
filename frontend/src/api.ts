@@ -163,10 +163,84 @@ export const api = {
 // ----- Tipos compartidos -----
 export type Rol = "superadmin" | "admin_negocio" | "peluquero" | "cliente";
 
-// Rol funcional del usuario DENTRO de un negocio concreto (personal, no el rol global de
-// la cuenta). "dueno" = es el dueño; los demás son personal invitado con ese rol.
-export type RolNegocio = "dueno" | "gerente" | "cajero" | "inventario" | "contador";
-export const ROLES_ASIGNABLES: { value: Exclude<RolNegocio, "dueno">; shortKey: TKey; labelKey: TKey }[] = [
+// Rol funcional del usuario DENTRO de un negocio concreto (personal, no el rol global de la
+// cuenta). El backend manda literalmente "dueno" si es el dueño (acceso total); para el
+// personal es solo una ETIQUETA de plantilla (cajero/gerente/.../personalizado) — no determina
+// el acceso, eso lo decide `misPermisos` función por función.
+export type RolNegocio = string;
+
+// Catálogo completo de permisos (espejo de backend/src/lib/acceso.ts) — cada uno protege una
+// acción concreta. El backend vuelve a exigir el mismo permiso en cada ruta; esto es solo para
+// armar los checkboxes y ocultar botones/pestañas que de todos modos fallarían.
+export const PERMISOS = [
+  "ventas.vender", "ventas.anular", "ventas.caja",
+  "inventario.ver", "inventario.crear", "inventario.editar", "inventario.eliminar",
+  "clientes.ver", "clientes.crear", "clientes.editar", "clientes.eliminar",
+  "compras.ver", "compras.crear", "compras.eliminar",
+  "gastos.ver", "gastos.crear", "gastos.eliminar",
+  "reportes.ver",
+  "impuestos.gestionar",
+  "agro.gestionar",
+  "equipo.ver", "equipo.crear", "equipo.editar", "equipo.eliminar",
+] as const;
+export type Permiso = (typeof PERMISOS)[number];
+
+// Grupos para la UI de selección (checkboxes agrupados por área). `modulo` es el módulo del
+// rubro que debe estar activo para mostrar ese grupo (undefined = siempre se muestra).
+export const GRUPOS_PERMISOS: { grupo: TKey; modulo?: string; permisos: { value: Permiso; labelKey: TKey }[] }[] = [
+  { grupo: "perm.group.ventas", modulo: "pos", permisos: [
+    { value: "ventas.vender", labelKey: "perm.ventas.vender" },
+    { value: "ventas.anular", labelKey: "perm.ventas.anular" },
+    { value: "ventas.caja", labelKey: "perm.ventas.caja" },
+  ] },
+  { grupo: "perm.group.inventario", modulo: "pos", permisos: [
+    { value: "inventario.ver", labelKey: "perm.inventario.ver" },
+    { value: "inventario.crear", labelKey: "perm.inventario.crear" },
+    { value: "inventario.editar", labelKey: "perm.inventario.editar" },
+    { value: "inventario.eliminar", labelKey: "perm.inventario.eliminar" },
+  ] },
+  { grupo: "perm.group.clientes", modulo: "customers", permisos: [
+    { value: "clientes.ver", labelKey: "perm.clientes.ver" },
+    { value: "clientes.crear", labelKey: "perm.clientes.crear" },
+    { value: "clientes.editar", labelKey: "perm.clientes.editar" },
+    { value: "clientes.eliminar", labelKey: "perm.clientes.eliminar" },
+  ] },
+  { grupo: "perm.group.compras", modulo: "purchasing", permisos: [
+    { value: "compras.ver", labelKey: "perm.compras.ver" },
+    { value: "compras.crear", labelKey: "perm.compras.crear" },
+    { value: "compras.eliminar", labelKey: "perm.compras.eliminar" },
+  ] },
+  { grupo: "perm.group.gastos", modulo: "expenses", permisos: [
+    { value: "gastos.ver", labelKey: "perm.gastos.ver" },
+    { value: "gastos.crear", labelKey: "perm.gastos.crear" },
+    { value: "gastos.eliminar", labelKey: "perm.gastos.eliminar" },
+  ] },
+  { grupo: "perm.group.reportes", permisos: [
+    { value: "reportes.ver", labelKey: "perm.reportes.ver" },
+  ] },
+  { grupo: "perm.group.impuestos", modulo: "taxes", permisos: [
+    { value: "impuestos.gestionar", labelKey: "perm.impuestos.gestionar" },
+  ] },
+  { grupo: "perm.group.agro", modulo: "agro", permisos: [
+    { value: "agro.gestionar", labelKey: "perm.agro.gestionar" },
+  ] },
+  { grupo: "perm.group.equipo", permisos: [
+    { value: "equipo.ver", labelKey: "perm.equipo.ver" },
+    { value: "equipo.crear", labelKey: "perm.equipo.crear" },
+    { value: "equipo.editar", labelKey: "perm.equipo.editar" },
+    { value: "equipo.eliminar", labelKey: "perm.equipo.eliminar" },
+  ] },
+];
+
+// Plantillas de arranque rápido (espejo de PLANTILLAS en el backend): el dueño puede aplicar
+// una para no tildar 24 casillas una por una, y después ajustar lo que quiera a mano.
+export const PLANTILLAS_PERMISOS: Record<string, Permiso[]> = {
+  gerente: PERMISOS.slice() as Permiso[],
+  cajero: ["ventas.vender", "ventas.caja"],
+  inventario: ["inventario.ver", "inventario.crear", "inventario.editar", "inventario.eliminar", "compras.ver", "compras.crear", "agro.gestionar"],
+  contador: ["gastos.ver", "gastos.crear", "gastos.eliminar", "reportes.ver", "impuestos.gestionar", "compras.ver"],
+};
+export const ROLES_ASIGNABLES: { value: string; shortKey: TKey; labelKey: TKey }[] = [
   { value: "gerente", shortKey: "roles.gerente", labelKey: "roles.gerenteFull" },
   { value: "cajero", shortKey: "roles.cajero", labelKey: "roles.cajeroFull" },
   { value: "inventario", shortKey: "roles.inventario", labelKey: "roles.inventarioFull" },
@@ -175,20 +249,15 @@ export const ROLES_ASIGNABLES: { value: Exclude<RolNegocio, "dueno">; shortKey: 
 // `t` se pasa desde el componente (useT) porque este archivo no es un componente React.
 export function rolNegocioLabel(rol: string, t: (key: TKey) => string): string {
   const found = ROLES_ASIGNABLES.find((r) => r.value === rol);
-  return found ? t(found.shortKey) : rol;
+  return found ? t(found.shortKey) : rol === "personalizado" ? t("roles.custom") : rol;
 }
 
-// Espejo del capacidades del backend (lib/acceso.ts): qué secciones puede ver cada rol.
-// Es solo para ocultar pestañas — el backend vuelve a exigir el mismo permiso en cada ruta.
-const CAPACIDADES_NEGOCIO: Record<Exclude<RolNegocio, "dueno">, Set<string>> = {
-  gerente: new Set(["pos", "caja", "inventario", "compras", "gastos", "reportes", "impuestos", "equipo", "agro"]),
-  cajero: new Set(["pos", "caja"]),
-  inventario: new Set(["inventario", "compras", "agro"]),
-  contador: new Set(["gastos", "reportes", "impuestos", "compras"]),
-};
-export function puedeNegocio(rol: RolNegocio | undefined, area: string): boolean {
-  if (!rol || rol === "dueno") return true;
-  return CAPACIDADES_NEGOCIO[rol]?.has(area) ?? false;
+// ¿Puede este usuario, en este negocio, hacer X? El dueño siempre puede todo; el personal
+// necesita tener AL MENOS UNO de los permisos pedidos en su lista `misPermisos`.
+export function puedeNegocio(negocio: { miRol?: RolNegocio; misPermisos?: Permiso[] } | undefined, permiso: Permiso | Permiso[]): boolean {
+  if (!negocio || !negocio.miRol || negocio.miRol === "dueno") return true;
+  const lista = Array.isArray(permiso) ? permiso : [permiso];
+  return (negocio.misPermisos ?? []).some((p) => lista.includes(p));
 }
 
 export interface Usuario {
@@ -210,8 +279,9 @@ export interface Negocio {
   telefonoContacto: string;
   logoUrl?: string | null;
   coverUrl?: string | null;
-  // Presente cuando la lista viene de /negocios/mios: qué rol tiene ESTE usuario ahí.
+  // Presente cuando la lista viene de /negocios/mios: qué rol/permisos tiene ESTE usuario ahí.
   miRol?: RolNegocio;
+  misPermisos?: Permiso[];
   lat?: number | null;
   lng?: number | null;
   ratingPromedio?: number;

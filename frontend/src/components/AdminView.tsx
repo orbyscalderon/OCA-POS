@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { api, ApiError, assetUrl, descargarCSV, puedeNegocio, rolNegocioLabel, ROLES_ASIGNABLES, type Negocio, type Perfil, type RolNegocio } from "../api";
+import { api, ApiError, assetUrl, descargarCSV, puedeNegocio, rolNegocioLabel, ROLES_ASIGNABLES, GRUPOS_PERMISOS, PLANTILLAS_PERMISOS, type Negocio, type Perfil, type RolNegocio, type Permiso } from "../api";
 import { useT } from "../i18n";
 import { COMPANY } from "../company";
 import { Stat } from "./Ui";
@@ -272,10 +272,13 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
   const equipo = miembros.filter((m) => m.estadoAprobacion === "aceptado");
   // Rol funcional de ESTE usuario en este negocio (undefined = dueño → acceso total).
   const miRol = negocio.miRol;
-  const esAdmin = puedeNegocio(miRol, "equipo"); // dueño o gerente: gestión de personal y equipo
-  // Cobros, suscripción, analítica y datos del negocio siguen siendo SOLO del dueño en el
-  // backend (cuentas bancarias, facturación, cancelar plan) — el frontend refleja lo mismo.
+  const esAdmin = puedeNegocio(negocio, ["equipo.ver", "equipo.crear", "equipo.editar", "equipo.eliminar"]);
+  // Cobros, suscripción y datos del negocio siguen siendo SOLO del dueño en el backend (cuentas
+  // bancarias, facturación, cancelar plan) — el frontend refleja lo mismo.
   const esDueno = !miRol || miRol === "dueno";
+  // Contabilidad se muestra si tiene AL MENOS uno de los permisos que agrupa adentro — igual
+  // que el backend exige para el PIN (ver PERMISOS_CONTABILIDAD en lib/acceso.ts).
+  const puedeContabilidad = esDueno || puedeNegocio(negocio, ["ventas.caja", "gastos.ver", "compras.ver", "impuestos.gestionar", "reportes.ver", "equipo.ver"]);
   const [seccionActiva, setSeccionActiva] = useState("");
 
   // Cada sección se muestra sola en el panel de la derecha (en vez de todo apilado en una
@@ -283,20 +286,13 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
   // cada bloque es un destino del menú lateral en lugar de una tarjeta más en la lista.
   const secciones: { key: string; label: string; icon: string; content: React.ReactNode }[] = [];
 
-  // Ventas e inventario son operativos del día a día (los usa el cajero en el mostrador), así
-  // que quedan sueltos y accesibles según el rol — no van detrás del PIN de Contabilidad.
-  // Solo "pos" y "agro" tienen el permiso reforzado también en el backend (lib/acceso.ts), así
-  // que son los únicos módulos que el personal con rol puede abrir. El resto (préstamos, mesas,
-  // taller, clientes) siguen siendo del dueño únicamente en el backend — mostrarlos a personal
-  // daría una pantalla que solo falla al guardar, así que quedan reservados a "esDueno" hasta
-  // que se refuerce cada uno.
-  if (modulos.includes("pos") && puedeNegocio(miRol, "pos")) {
+  if (modulos.includes("pos") && puedeNegocio(negocio, ["ventas.vender", "inventario.ver"])) {
     secciones.push({ key: "ventas", label: t("nav.sales"), icon: "🛒", content: <Vender negocio={negocio} credit={modulos.includes("credit")} /> });
   }
-  if (modulos.includes("pos") && puedeNegocio(miRol, "inventario")) {
+  if (modulos.includes("pos") && puedeNegocio(negocio, ["inventario.ver", "inventario.crear", "inventario.editar", "inventario.eliminar"])) {
     secciones.push({ key: "inventario", label: t("nav.inventory"), icon: "📦", content: <Productos negocio={negocio} /> });
   }
-  if (modulos.includes("agro") && puedeNegocio(miRol, "agro")) {
+  if (modulos.includes("agro") && puedeNegocio(negocio, "agro.gestionar")) {
     secciones.push({ key: "agro", label: t("nav.agro"), icon: "🐔", content: <AgroView negocio={negocio} miRol={miRol} /> });
   }
   if (esDueno && modulos.includes("lending")) {
@@ -308,8 +304,8 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
   if (esDueno && modulos.includes("service_orders")) {
     secciones.push({ key: "ordenes", label: t("nav.orders"), icon: "🔧", content: <ServiceOrdersView negocio={negocio} /> });
   }
-  if (esDueno && modulos.includes("customers")) {
-    secciones.push({ key: "clientes", label: t("nav.customers"), icon: "👤", content: <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} credit={modulos.includes("credit")} /> });
+  if (modulos.includes("customers") && puedeNegocio(negocio, ["clientes.ver", "clientes.crear", "clientes.editar", "clientes.eliminar"])) {
+    secciones.push({ key: "clientes", label: t("nav.customers"), icon: "👤", content: <ClientesView negocio={negocio} loyalty={modulos.includes("loyalty")} credit={modulos.includes("credit")} puedeEditar={puedeNegocio(negocio, ["clientes.crear", "clientes.editar"])} puedeEliminar={puedeNegocio(negocio, "clientes.eliminar")} /> });
   }
   if (modulos.includes("storefront") && esAdmin) {
     secciones.push({ key: "tienda", label: t("nav.store"), icon: "🌐", content: <TiendaLink slug={negocio.slug} /> });
@@ -318,60 +314,71 @@ function GestionEquipo({ negocio, onVolver }: { negocio: Negocio; onVolver?: () 
   // Contabilidad agrupa todo lo sensible (equipo/roles, caja, compras, gastos, impuestos,
   // analítica) detrás de un PIN aparte del login — así un cajero con sesión iniciada no puede
   // ver quién gana qué, cuánto hay en caja, ni los números del negocio sin que el dueño
-  // autorice esa pantalla puntual.
-  if (esDueno) {
+  // autorice esa pantalla puntual. Se muestra a cualquiera con al menos un permiso de esa
+  // área — adentro, cada bloque igual se filtra por su propio permiso.
+  if (puedeContabilidad) {
     secciones.push({
       key: "contabilidad",
       label: t("nav.accounting"),
       icon: "🔒",
       content: (
         <ContabilidadPanel negocio={negocio}>
-          <div className="card">
-            <div className="row spread">
-              <h2>{t("own.activeTeam")}</h2>
-              <span className={`badge ${activos >= limite ? "err" : "ok"}`}>{activos} / {limite} {t("own.professionals")}</span>
-            </div>
-            {error && <p className="error">{error}</p>}
-            {equipo.map((m) => (
-              <div className="list-item" key={m.id}>
-                <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email}</span></div>
-                <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.remove")}</button>
+          {esAdmin && (
+            <div className="card">
+              <div className="row spread">
+                <h2>{t("own.activeTeam")}</h2>
+                <span className={`badge ${activos >= limite ? "err" : "ok"}`}>{activos} / {limite} {t("own.professionals")}</span>
               </div>
-            ))}
-            {equipo.length === 0 && <p className="muted small">{t("own.noActivePros")}</p>}
-          </div>
-
-          <div className="card">
-            <h2>{t("own.pendingRequests")} ({pendientes.length})</h2>
-            {pendientes.map((m) => (
-              <div className="list-item" key={m.id}>
-                <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email} · {m.usuario.telefono}</span></div>
-                <div className="row">
-                  <button className="primary" disabled={activos >= limite} onClick={() => decidir(m.id, "aceptado")}>{t("own.accept")}</button>
-                  <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.reject")}</button>
+              {error && <p className="error">{error}</p>}
+              {equipo.map((m) => (
+                <div className="list-item" key={m.id}>
+                  <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email}</span></div>
+                  <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.remove")}</button>
                 </div>
-              </div>
-            ))}
-            {pendientes.length === 0 && <p className="muted small">{t("own.noPending")}</p>}
-            {activos >= limite && pendientes.length > 0 && <p className="error">{t("own.limitReached")}</p>}
-          </div>
+              ))}
+              {equipo.length === 0 && <p className="muted small">{t("own.noActivePros")}</p>}
+            </div>
+          )}
 
-          <PersonalNegocio negocioId={negocio.id} />
+          {esAdmin && (
+            <div className="card">
+              <h2>{t("own.pendingRequests")} ({pendientes.length})</h2>
+              {pendientes.map((m) => (
+                <div className="list-item" key={m.id}>
+                  <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email} · {m.usuario.telefono}</span></div>
+                  <div className="row">
+                    <button className="primary" disabled={activos >= limite} onClick={() => decidir(m.id, "aceptado")}>{t("own.accept")}</button>
+                    <button className="ghost" onClick={() => decidir(m.id, "rechazado")}>{t("own.reject")}</button>
+                  </div>
+                </div>
+              ))}
+              {pendientes.length === 0 && <p className="muted small">{t("own.noPending")}</p>}
+              {activos >= limite && pendientes.length > 0 && <p className="error">{t("own.limitReached")}</p>}
+            </div>
+          )}
+
+          {esAdmin && <PersonalNegocio negocioId={negocio.id} modulos={modulos} />}
           {/* El "equipo de profesionales" con agenda solo aplica a rubros con citas — un
               comercio minorista como una tienda de vapes no tiene profesionales que reservan. */}
-          {modulos.includes("appointments") && <Invitacion negocioId={negocio.id} />}
+          {modulos.includes("appointments") && esAdmin && <Invitacion negocioId={negocio.id} />}
 
-          {modulos.includes("pos") && <Caja negocio={negocio} />}
-          {modulos.includes("purchasing") && <ComprasView negocio={negocio} />}
-          {modulos.includes("expenses") && <GastosView negocio={negocio} />}
-          {modulos.includes("taxes") && <ImpuestosView negocio={negocio} />}
-          {modulos.includes("pos") && <Rentabilidad negocioId={negocio.id} />}
+          {modulos.includes("pos") && puedeNegocio(negocio, "ventas.caja") && <Caja negocio={negocio} />}
+          {modulos.includes("purchasing") && puedeNegocio(negocio, "compras.ver") && (
+            <ComprasView negocio={negocio} puedeCrear={puedeNegocio(negocio, "compras.crear")} puedeEliminar={puedeNegocio(negocio, "compras.eliminar")} />
+          )}
+          {modulos.includes("expenses") && puedeNegocio(negocio, "gastos.ver") && (
+            <GastosView negocio={negocio} puedeCrear={puedeNegocio(negocio, "gastos.crear")} puedeEliminar={puedeNegocio(negocio, "gastos.eliminar")} />
+          )}
+          {modulos.includes("taxes") && puedeNegocio(negocio, "impuestos.gestionar") && <ImpuestosView negocio={negocio} />}
+          {modulos.includes("pos") && puedeNegocio(negocio, "reportes.ver") && <Rentabilidad negocioId={negocio.id} />}
           {/* La analítica de citas/profesionales solo tiene datos reales en rubros con
               agenda — en un comercio minorista sin citas siempre da todo en cero. */}
-          {modulos.includes("appointments") && <Analitica negocioId={negocio.id} />}
+          {modulos.includes("appointments") && puedeNegocio(negocio, "reportes.ver") && <Analitica negocioId={negocio.id} />}
         </ContabilidadPanel>
       ),
     });
+  }
+  if (esDueno) {
     secciones.push({
       key: "config",
       label: t("nav.settings"),
@@ -479,7 +486,13 @@ function ContabilidadPanel({ negocio, children }: { negocio: Negocio; children: 
 
   if (desbloqueado) return <>{children}</>;
 
+  const esDueno = !negocio.miRol || negocio.miRol === "dueno";
+
   if (!configurado) {
+    // Solo el dueño puede definir el PIN (el backend también lo exige) — el personal con
+    // acceso a Contabilidad tiene que esperar a que lo configure, no tiene sentido mostrarle
+    // un formulario que va a fallar al guardar.
+    if (!esDueno) return <p className="muted small">{t("pin.waitingOwner")}</p>;
     return (
       <div className="card pin-gate">
         <h2>{t("pin.setTitle")}</h2>
@@ -508,18 +521,67 @@ function ContabilidadPanel({ negocio, children }: { negocio: Negocio; children: 
   );
 }
 
-// ---------- Personal del negocio (roles funcionales: gerente / cajero / inventario / contador) ----------
+// ---------- Personal del negocio: permisos granulares, función por función ----------
 interface MiembroFuncional {
-  id: string; rol: RolNegocio; activo: boolean;
+  id: string; rol: RolNegocio; permisos: Permiso[]; activo: boolean;
   usuario: { id: number; nombre: string; email: string; telefono: string };
 }
 
-function PersonalNegocio({ negocioId }: { negocioId: string }) {
+// Si la lista de permisos coincide exactamente con una plantilla, se usa su nombre para la
+// etiqueta (badge); si no, es una combinación armada a mano.
+function nombrePlantilla(permisos: Permiso[]): string {
+  const set = new Set(permisos);
+  for (const [nombre, lista] of Object.entries(PLANTILLAS_PERMISOS)) {
+    if (lista.length === set.size && lista.every((p) => set.has(p))) return nombre;
+  }
+  return "personalizado";
+}
+
+// Checkboxes de permisos agrupados por área + botones de plantilla rápida para no tener que
+// tildar las 24 casillas una por una. Se reutiliza tanto para dar de alta a alguien como para
+// editar los permisos de alguien que ya está.
+function SelectorPermisos({ modulos, value, onChange }: { modulos: string[]; value: Permiso[]; onChange: (p: Permiso[]) => void }) {
+  const { t } = useT();
+  function toggle(p: Permiso) {
+    onChange(value.includes(p) ? value.filter((x) => x !== p) : [...value, p]);
+  }
+  const grupos = GRUPOS_PERMISOS.filter((g) => !g.modulo || modulos.includes(g.modulo));
+  return (
+    <div>
+      <div className="row" style={{ flexWrap: "wrap", gap: 6, marginBottom: 10 }}>
+        <span className="muted small" style={{ alignSelf: "center" }}>{t("staff.template")}:</span>
+        {ROLES_ASIGNABLES.map((r) => (
+          <button key={r.value} type="button" className="ghost small" onClick={() => onChange(PLANTILLAS_PERMISOS[r.value] ?? [])}>
+            {t(r.shortKey)}
+          </button>
+        ))}
+        <button type="button" className="ghost small" onClick={() => onChange([])}>{t("staff.templateNone")}</button>
+      </div>
+      <div className="grid grid-2">
+        {grupos.map((g) => (
+          <div key={g.grupo} style={{ background: "var(--surface-2)", borderRadius: 10, padding: 10 }}>
+            <strong className="small">{t(g.grupo)}</strong>
+            {g.permisos.map((p) => (
+              <label key={p.value} style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 6, cursor: "pointer" }}>
+                <input type="checkbox" checked={value.includes(p.value)} onChange={() => toggle(p.value)} style={{ width: 16, height: 16, padding: 0, flexShrink: 0 }} />
+                <span className="small">{t(p.labelKey)}</span>
+              </label>
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PersonalNegocio({ negocioId, modulos }: { negocioId: string; modulos: string[] }) {
   const { t } = useT();
   const [miembros, setMiembros] = useState<MiembroFuncional[]>([]);
-  const [rolInvitar, setRolInvitar] = useState<(typeof ROLES_ASIGNABLES)[number]["value"]>("cajero");
+  const [permisosInvitar, setPermisosInvitar] = useState<Permiso[]>(PLANTILLAS_PERMISOS.cajero);
   const [url, setUrl] = useState("");
   const [error, setError] = useState("");
+  const [editando, setEditando] = useState<string | null>(null);
+  const [permisosEditar, setPermisosEditar] = useState<Permiso[]>([]);
 
   // App de escritorio: crea la cuenta directo, ya que un link de invitación no le llegaría a
   // nadie (el servidor solo es alcanzable en esta misma PC).
@@ -538,7 +600,7 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
   async function invitar() {
     setError(""); setUrl("");
     try {
-      const r = await api.post<{ url: string }>(`/negocios/${negocioId}/invitaciones`, { rol: rolInvitar });
+      const r = await api.post<{ url: string }>(`/negocios/${negocioId}/invitaciones`, { rol: nombrePlantilla(permisosInvitar), permisos: permisosInvitar });
       setUrl(r.url);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : t("common.error"));
@@ -550,7 +612,8 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
     setCreando(true);
     try {
       await api.post(`/negocios/${negocioId}/miembros/crear-directo`, {
-        nombre: nuevoNombre, email: nuevoEmail, telefono: nuevoTelefono, password: nuevaClave, rol: rolInvitar,
+        nombre: nuevoNombre, email: nuevoEmail, telefono: nuevoTelefono, password: nuevaClave,
+        rol: nombrePlantilla(permisosInvitar), permisos: permisosInvitar,
       });
       setNuevoNombre(""); setNuevoEmail(""); setNuevoTelefono(""); setNuevaClave("");
       cargar();
@@ -561,8 +624,14 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
     }
   }
 
-  async function cambiarRol(m: MiembroFuncional, rol: RolNegocio) {
-    await api.patch(`/negocios/${negocioId}/miembros/${m.id}`, { rol });
+  function empezarEditar(m: MiembroFuncional) {
+    setEditando(editando === m.id ? null : m.id);
+    setPermisosEditar(m.permisos ?? []);
+  }
+
+  async function guardarPermisos(m: MiembroFuncional) {
+    await api.patch(`/negocios/${negocioId}/miembros/${m.id}`, { rol: nombrePlantilla(permisosEditar), permisos: permisosEditar });
+    setEditando(null);
     cargar();
   }
 
@@ -579,17 +648,31 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
       {error && <p className="error small">{error}</p>}
 
       {miembros.map((m) => (
-        <div className="list-item" key={m.id}>
-          <div><h3>{m.usuario.nombre}</h3><span className="muted small">{m.usuario.email}</span></div>
-          <div className="row">
-            <select value={m.rol} onChange={(e) => cambiarRol(m, e.target.value as RolNegocio)}>
-              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
-            </select>
-            <button className="ghost small" onClick={() => quitar(m)}>{t("admin.remove")}</button>
+        <div key={m.id} style={{ borderBottom: "1px solid var(--border)", paddingBottom: 8, marginBottom: 8 }}>
+          <div className="list-item" style={{ borderBottom: "none", padding: "8px 0" }}>
+            <div>
+              <h3>{m.usuario.nombre}</h3>
+              <span className="muted small">{m.usuario.email} · <span className="badge">{rolNegocioLabel(m.rol, t)}</span> · {(m.permisos ?? []).length} {t("staff.permCount")}</span>
+            </div>
+            <div className="row">
+              <button className="ghost small" onClick={() => empezarEditar(m)}>{editando === m.id ? t("common.cancel") : t("staff.editPerms")}</button>
+              <button className="ghost small" onClick={() => quitar(m)}>{t("admin.remove")}</button>
+            </div>
           </div>
+          {editando === m.id && (
+            <div style={{ marginTop: 6 }}>
+              <SelectorPermisos modulos={modulos} value={permisosEditar} onChange={setPermisosEditar} />
+              <button className="primary small" style={{ marginTop: 8 }} onClick={() => guardarPermisos(m)}>{t("common.save")}</button>
+            </div>
+          )}
         </div>
       ))}
       {miembros.length === 0 && <p className="muted small">{t("admin.noStaffYet")}</p>}
+
+      <div style={{ marginTop: 14 }}>
+        <strong className="small">{t("staff.newStaff")}</strong>
+        <SelectorPermisos modulos={modulos} value={permisosInvitar} onChange={setPermisosInvitar} />
+      </div>
 
       {DESKTOP_MODE ? (
         <div style={{ marginTop: 10 }}>
@@ -599,21 +682,11 @@ function PersonalNegocio({ negocioId }: { negocioId: string }) {
             <input placeholder={t("staff.email")} value={nuevoEmail} onChange={(e) => setNuevoEmail(e.target.value)} />
             <input type="password" placeholder={t("staff.password")} value={nuevaClave} onChange={(e) => setNuevaClave(e.target.value)} />
           </div>
-          <div className="row" style={{ marginTop: 8 }}>
-            <select value={rolInvitar} onChange={(e) => setRolInvitar(e.target.value as typeof rolInvitar)}>
-              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
-            </select>
-            <button className="primary" disabled={creando} onClick={crearDirecto}>{t("staff.create")}</button>
-          </div>
+          <button className="primary" style={{ marginTop: 8 }} disabled={creando} onClick={crearDirecto}>{t("staff.create")}</button>
         </div>
       ) : (
         <>
-          <div className="row" style={{ marginTop: 10 }}>
-            <select value={rolInvitar} onChange={(e) => setRolInvitar(e.target.value as typeof rolInvitar)}>
-              {ROLES_ASIGNABLES.map((r) => <option key={r.value} value={r.value}>{t(r.labelKey)}</option>)}
-            </select>
-            <button className="primary" onClick={invitar}>{t("admin.generateInvite")}</button>
-          </div>
+          <button className="primary" style={{ marginTop: 10 }} onClick={invitar}>{t("admin.generateInvite")}</button>
           {url && (
             <div className="row" style={{ marginTop: 10 }}>
               <input readOnly value={url} onFocus={(e) => e.currentTarget.select()} />

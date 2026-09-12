@@ -271,6 +271,7 @@ negociosRouter.post(
 
 // ---------- Actualizar datos/ubicación del negocio (dueño) ----------
 const actualizarNegocioSchema = z.object({
+  nombreComercial: z.string().min(2).max(150).optional(),
   direccion: z.string().min(3).optional(),
   categoria: z.string().min(2).max(40).optional(),
   telefonoContacto: z.string().min(6).max(20).optional(),

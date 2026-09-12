@@ -63,6 +63,9 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   // botón muestra de una todos los sabores disponibles (como variantes de "Recarga") para
   // elegir cuál vender.
   const [mostrarSabores, setMostrarSabores] = useState(false);
+  // Si se buscó/eligió la LÍNEA (ej. "Recargas", que no se vende directo) en vez de un sabor
+  // puntual, primero hay que elegir cuál de sus sabores es — cada uno es un producto real.
+  const [lineaSeleccionada, setLineaSeleccionada] = useState<Producto | null>(null);
   const [carrito, setCarrito] = useState<LineaCarrito[]>([]);
   const [metodoPago, setMetodoPago] = useState("efectivo");
   const [clienteQ, setClienteQ] = useState("");
@@ -119,6 +122,14 @@ export function Vender({ negocio, credit }: { negocio: Negocio; credit: boolean 
   }, [busqueda, negocio.id]);
 
 function agregar(p: Producto) {
+    // "Recargas" (la línea) no se vende directo — es la plantilla. Si tiene sabores
+    // vinculados, buscarla y elegirla lleva primero a elegir CUÁL sabor (que sí es un
+    // producto real, con su propio stock) antes de seguir con el tanque/ml.
+    const saboresDeLaLinea = liquidos.filter((x) => x.varianteBaseId === p.id);
+    if (saboresDeLaLinea.length > 0) {
+      setLineaSeleccionada(p); setBusqueda(""); setResultados([]); setMostrarSabores(false);
+      return;
+    }
     // Un líquido con volumen (ml) no se vende "1 unidad = el pote entero": se pregunta cuántos
     // ml se lleva el cliente y se calcula el precio proporcional al pote.
     if (p.volumenMl != null && num(p.volumenMl) > 0) {
@@ -243,11 +254,14 @@ function agregar(p: Producto) {
         )}
       </div>
 
-      {mostrarSabores && (
+      {lineaSeleccionada && (
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 300, overflowY: "auto" }}>
-          <strong className="small muted">{t("pos.refillMenuHint")}</strong>
-          {liquidos.map((p) => (
-            <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => { agregar(p); setMostrarSabores(false); }}>
+          <div className="row spread">
+            <strong className="small muted">{t("pos.flavorPickHint")} "{lineaSeleccionada.nombre}"</strong>
+            <button type="button" className="ghost small" onClick={() => setLineaSeleccionada(null)}>{t("common.cancel")}</button>
+          </div>
+          {liquidos.filter((x) => x.varianteBaseId === lineaSeleccionada.id).map((p) => (
+            <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => { agregar(p); setLineaSeleccionada(null); }}>
               <div className="row" style={{ gap: 10 }}>
                 {p.imagenUrl && <img src={assetUrl(p.imagenUrl)} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />}
                 <div>
@@ -261,10 +275,36 @@ function agregar(p: Producto) {
         </div>
       )}
 
+      {mostrarSabores && (
+        <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 300, overflowY: "auto" }}>
+          <strong className="small muted">{t("pos.refillMenuHint")}</strong>
+          {liquidos.filter((p) => !p.varianteBaseId).map((p) => {
+            const esLinea = liquidos.some((x) => x.varianteBaseId === p.id);
+            return (
+            <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => { agregar(p); if (!esLinea) setMostrarSabores(false); }}>
+              <div className="row" style={{ gap: 10 }}>
+                {p.imagenUrl && <img src={assetUrl(p.imagenUrl)} alt="" style={{ width: 40, height: 40, borderRadius: 8, objectFit: "cover" }} />}
+                <div>
+                  <strong>{p.nombre}</strong><br />
+                  {esLinea ? (
+                    <span className="muted small">{t("pos.flavorLineHint")}</span>
+                  ) : (
+                    <span className="muted small">{t("pos.stock")}: {num(p.stock)} ml · {money(precioPorMl(p))}/ml</span>
+                  )}
+                </div>
+              </div>
+              <strong>{esLinea ? t("pos.flavorPickCta") : t("pos.refillCta")}</strong>
+            </div>
+            );
+          })}
+        </div>
+      )}
+
       {resultados.length > 0 && (
         <div className="card" style={{ background: "var(--surface-2)", marginTop: 6, maxHeight: 220, overflowY: "auto" }}>
           {resultados.map((p) => {
             const esLiquido = p.volumenMl != null && num(p.volumenMl) > 0;
+            const esLinea = liquidos.some((x) => x.varianteBaseId === p.id);
             return (
               <div className="list-item" key={p.id} style={{ cursor: "pointer" }} onClick={() => agregar(p)}>
                 <div className="row" style={{ gap: 10 }}>
@@ -272,13 +312,15 @@ function agregar(p: Producto) {
                   <div>
                     <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span><br />
                     <span className="muted small">
-                      {esLiquido
-                        ? `${t("pos.stock")}: ${num(p.stock)} ml · ${money(precioPorMl(p))}/ml`
-                        : `${t("pos.stock")}: ${num(p.stock)} ${p.unidad}`}
+                      {esLinea
+                        ? t("pos.flavorLineHint")
+                        : esLiquido
+                          ? `${t("pos.stock")}: ${num(p.stock)} ml · ${money(precioPorMl(p))}/ml`
+                          : `${t("pos.stock")}: ${num(p.stock)} ${p.unidad}`}
                     </span>
                   </div>
                 </div>
-                <strong>{esLiquido ? t("pos.refillCta") : money(p.precioVenta)}</strong>
+                <strong>{esLinea ? t("pos.flavorPickCta") : esLiquido ? t("pos.refillCta") : money(p.precioVenta)}</strong>
               </div>
             );
           })}
@@ -303,6 +345,16 @@ function agregar(p: Producto) {
               💡 {recargaPendiente.notasTecnicas}
             </p>
           )}
+
+          {/* Vender el pote entero es otra venta distinta a una recarga (no es un servicio
+              parcial, es el producto completo) — pero descuenta del MISMO producto: son los
+              mismos ml de stock, solo que de una sola vez en vez de a pedacitos. */}
+          <button
+            type="button" className="ghost" style={{ marginTop: 10, width: "100%" }}
+            onClick={() => { setMlRecarga(String(num(recargaPendiente.volumenMl))); setPrecioRecargaEditado(null); }}
+          >
+            🍾 {t("pos.sellWholeBottle")} ({num(recargaPendiente.volumenMl)}ml) — {money(recargaPendiente.precioVenta)}
+          </button>
 
           <label style={{ marginTop: 10 }}>{t("pos.refillTank")}</label>
           <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>
@@ -578,11 +630,16 @@ function SaboresDeLinea({ negocioId, base, todos, onCambio }: { negocioId: strin
   const sabores = todos.filter((x) => x.id !== base.id && (x.varianteBaseId === baseId || x.id === baseId));
   const esLiquido = base.volumenMl != null && num(base.volumenMl) > 0;
   const vol = num(base.volumenMl);
+  // Productos ya existentes que se pueden vincular como sabor de esta línea: cualquier otro
+  // producto del negocio que todavía no sea parte de ESTA línea (y no sea la base ni un
+  // "padre" de otra línea distinta con sabores propios, para no anidar líneas).
+  const vinculables = todos.filter((x) => x.id !== base.id && x.varianteBaseId !== baseId && !todos.some((y) => y.varianteBaseId === x.id));
 
   const [nombre, setNombre] = useState("");
   const [precioVenta, setPrecioVenta] = useState(String(num(base.precioVenta)));
   const [costo, setCosto] = useState(base.costo != null ? String(num(base.costo)) : "");
   const [stockInput, setStockInput] = useState("");
+  const [aVincular, setAVincular] = useState("");
   const [error, setError] = useState("");
   const [guardando, setGuardando] = useState(false);
 
@@ -608,6 +665,23 @@ function SaboresDeLinea({ negocioId, base, todos, onCambio }: { negocioId: strin
     }
   }
 
+  async function vincular() {
+    if (!aVincular) return;
+    setError("");
+    try {
+      await api.patch(`/inventario/${aVincular}`, { varianteBaseId: baseId });
+      setAVincular("");
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("common.error"));
+    }
+  }
+
+  async function desvincular(id: string) {
+    await api.patch(`/inventario/${id}`, { varianteBaseId: null });
+    onCambio();
+  }
+
   return (
     <div className="card" style={{ background: "var(--surface-3)", marginTop: 10 }}>
       <strong className="small">{t("pos.flavorsTitle")}</strong>
@@ -617,11 +691,26 @@ function SaboresDeLinea({ negocioId, base, todos, onCambio }: { negocioId: strin
           {sabores.map((s) => (
             <div className="list-item" key={s.id}>
               <span>{s.nombre}</span>
-              <span className="muted small">{money(s.precioVenta)} · {t("pos.stock")}: {num(s.stock)} {esLiquido ? "ml" : s.unidad}</span>
+              <div className="row" style={{ alignItems: "center", gap: 8 }}>
+                <span className="muted small">{money(s.precioVenta)} · {t("pos.stock")}: {num(s.stock)} {esLiquido ? "ml" : s.unidad}</span>
+                {s.id !== base.id && <button type="button" className="ghost small" onClick={() => desvincular(s.id)}>{t("pos.flavorUnlink")}</button>}
+              </div>
             </div>
           ))}
         </div>
       )}
+
+      {vinculables.length > 0 && (
+        <div className="row" style={{ marginBottom: 10 }}>
+          <select value={aVincular} onChange={(e) => setAVincular(e.target.value)} style={{ flex: 1 }}>
+            <option value="">{t("pos.flavorLinkPh")}</option>
+            {vinculables.map((p) => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+          </select>
+          <button type="button" className="primary small" disabled={!aVincular} onClick={vincular}>{t("pos.flavorLink")}</button>
+        </div>
+      )}
+
+      <p className="muted small" style={{ margin: "0 0 6px" }}>{t("pos.flavorOrCreate")}</p>
       <form onSubmit={agregar} className="grid grid-2">
         <div><label>{t("pos.flavorName")}</label><input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder={t("pos.flavorNamePh")} required /></div>
         <div><label>{t("pos.salePrice")}</label><input type="number" step="0.01" min="0" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required /></div>

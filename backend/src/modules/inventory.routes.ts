@@ -36,6 +36,9 @@ const productoSchema = z.object({
   // Trazabilidad de lote/vencimiento (farmacia, panadería, perecederos en general).
   loteNumero: z.string().max(60).nullable().optional(),
   fechaVencimiento: z.coerce.date().nullable().optional(),
+  // Sabor/variante de una misma línea (ej. "Recargas": Mango, Fresa, Menta) — cada uno sigue
+  // siendo su propio producto con su propio stock/precio/costo, esto solo los agrupa.
+  varianteBaseId: z.string().min(1).nullable().optional(),
 });
 
 // El producto fuente (el pote del que descuenta una recarga) debe ser del MISMO negocio —
@@ -43,6 +46,12 @@ const productoSchema = z.object({
 async function assertProductoFuenteValido(negocioId: string, productoFuenteId: string) {
   const fuente = await prisma.producto.findUnique({ where: { id: productoFuenteId }, select: { negocioId: true } });
   if (!fuente || fuente.negocioId !== negocioId) throw BadRequest("El producto fuente no pertenece a este negocio", "PRODUCTO_FUENTE_INVALIDO");
+}
+
+// Misma idea para la línea de sabores: la base debe ser del mismo negocio.
+async function assertVarianteBaseValida(negocioId: string, varianteBaseId: string) {
+  const base = await prisma.producto.findUnique({ where: { id: varianteBaseId }, select: { negocioId: true } });
+  if (!base || base.negocioId !== negocioId) throw BadRequest("La línea de sabores no pertenece a este negocio", "VARIANTE_BASE_INVALIDA");
 }
 
 // Listar productos de un negocio. La venta también busca acá (para elegir qué vender), así
@@ -61,7 +70,13 @@ inventoryRouter.get(
       where: {
         negocioId,
         ...(todos ? {} : { activo: true }),
-        ...(q ? { OR: [{ nombre: { contains: q, mode: "insensitive" } }, { sku: { contains: q, mode: "insensitive" } }] } : {}),
+        // Buscar el nombre de la línea (ej. "Recargas") también encuentra sus sabores —
+        // así no hace falta saber el nombre exacto de cada variante para venderla.
+        ...(q ? { OR: [
+          { nombre: { contains: q, mode: "insensitive" } },
+          { sku: { contains: q, mode: "insensitive" } },
+          { varianteBase: { nombre: { contains: q, mode: "insensitive" } } },
+        ] } : {}),
       },
       orderBy: { nombre: "asc" },
     });
@@ -77,6 +92,7 @@ inventoryRouter.post(
     const d = productoSchema.parse(req.body);
     await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "inventario.crear");
     if (d.productoFuenteId) await assertProductoFuenteValido(d.negocioId, d.productoFuenteId);
+    if (d.varianteBaseId) await assertVarianteBaseValida(d.negocioId, d.varianteBaseId);
     const producto = await prisma.producto.create({
       data: {
         negocioId: d.negocioId, nombre: d.nombre, sku: d.sku ?? null, categoria: d.categoria ?? null,
@@ -86,6 +102,7 @@ inventoryRouter.post(
         productoFuenteId: d.productoFuenteId ?? null, rendimientoPorVenta: d.rendimientoPorVenta ?? null,
         tipoProducto: d.tipoProducto, notasTecnicas: d.notasTecnicas ?? null,
         loteNumero: d.loteNumero ?? null, fechaVencimiento: d.fechaVencimiento ?? null,
+        varianteBaseId: d.varianteBaseId ?? null,
       },
     });
     // Movimiento inicial de stock si arranca con existencias.
@@ -106,6 +123,7 @@ inventoryRouter.patch(
     await requireAcceso(p.negocioId, req.user!.sub, req.user!.rol, "inventario.editar");
     const d = productoSchema.partial().omit({ negocioId: true, stock: true }).extend({ activo: z.boolean().optional() }).parse(req.body);
     if (d.productoFuenteId) await assertProductoFuenteValido(p.negocioId, d.productoFuenteId);
+    if (d.varianteBaseId) await assertVarianteBaseValida(p.negocioId, d.varianteBaseId);
     const producto = await prisma.producto.update({ where: { id: req.params.id }, data: d });
     res.json({ producto });
   }),

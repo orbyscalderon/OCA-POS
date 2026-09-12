@@ -7,11 +7,15 @@ import { useT } from "../i18n";
 // orden (todavía no toca stock) y recibirla cuando el pedido realmente llega (ahí sí entra al
 // inventario) — o, para una compra de contado que ya se está llevando, registrarla recibida
 // directamente, como antes.
-interface Producto { id: string; nombre: string; costo: string | number | null }
-interface LineaCompra { productoId?: string; nombre: string; cantidad: number; costoUnit: number }
-interface Compra { id: string; proveedor: string | null; total: string | number; fecha: string; estado: "pendiente" | "recibida"; lineas: { nombre: string; cantidad: string | number; costoUnit: string | number }[] }
+interface Producto { id: string; nombre: string; costo: string | number | null; volumenMl: string | number | null }
+// `mlTotal`/`unidades` son solo para mostrar el detalle de la línea (líquidos comprados por
+// botella) — lo que de verdad se manda al backend es `cantidad` (ml reales) y `costoUnit`
+// (costo por ml), igual que para cualquier otro producto.
+interface LineaCompra { productoId?: string; nombre: string; cantidad: number; costoUnit: number; unidades?: number; mlTotal?: number }
+interface Compra { id: string; proveedor: string | null; total: string | number; fecha: string; estado: "pendiente" | "recibida"; lineas: { productoId: string | null; nombre: string; cantidad: string | number; costoUnit: string | number }[] }
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
 const hoy = hoyLocal;
+const num = (n: string | number | null) => Number(n ?? 0);
 
 export function ComprasView({ negocio, puedeCrear = true, puedeEliminar = true }: { negocio: Negocio; puedeCrear?: boolean; puedeEliminar?: boolean }) {
   const { t } = useT();
@@ -40,10 +44,27 @@ export function ComprasView({ negocio, puedeCrear = true, puedeEliminar = true }
   }
   useEffect(cargar, [negocio.id]);
 
+  const productoSel = productos.find((p) => p.id === l.productoId) ?? null;
+  const esLiquido = !!productoSel && productoSel.volumenMl != null && num(productoSel.volumenMl) > 0;
+  const volSel = esLiquido ? num(productoSel!.volumenMl) : 0;
+
   function agregarLinea() {
-    const nombre = l.productoId ? (productos.find((p) => p.id === l.productoId)?.nombre ?? l.nombre) : l.nombre;
+    const nombre = l.productoId ? (productoSel?.nombre ?? l.nombre) : l.nombre;
     if (!nombre || !l.costoUnit) return;
-    setLineas((xs) => [...xs, { productoId: l.productoId || undefined, nombre, cantidad: Number(l.cantidad), costoUnit: Number(l.costoUnit) }]);
+    if (esLiquido) {
+      // El negocio compra botellas enteras (ej. 5 botellas de 100ml a $20 cada una) — se
+      // convierte a lo que el resto del sistema espera: ml reales que entran al stock, y costo
+      // por ml (para que cantidad × costoUnit siga dando el total correcto de la línea).
+      const unidades = Number(l.cantidad);
+      const costoPorBotella = Number(l.costoUnit);
+      setLineas((xs) => [...xs, {
+        productoId: l.productoId || undefined, nombre,
+        cantidad: unidades * volSel, costoUnit: costoPorBotella / volSel,
+        unidades, mlTotal: unidades * volSel,
+      }]);
+    } else {
+      setLineas((xs) => [...xs, { productoId: l.productoId || undefined, nombre, cantidad: Number(l.cantidad), costoUnit: Number(l.costoUnit) }]);
+    }
     setL({ productoId: "", nombre: "", cantidad: "1", costoUnit: "" });
   }
 
@@ -51,7 +72,8 @@ export function ComprasView({ negocio, puedeCrear = true, puedeEliminar = true }
     e.preventDefault(); setError(""); setMsg("");
     if (lineas.length === 0) { setError(t("compras.needLine")); return; }
     try {
-      await api.post("/compras", { negocioId: negocio.id, proveedor, fecha, lineas, recibirAhora });
+      const lineasParaEnviar = lineas.map(({ productoId, nombre, cantidad, costoUnit }) => ({ productoId, nombre, cantidad, costoUnit }));
+      await api.post("/compras", { negocioId: negocio.id, proveedor, fecha, lineas: lineasParaEnviar, recibirAhora });
       setMsg(recibirAhora ? t("compras.registered") : t("compras.orderSaved"));
       setLineas([]); setProveedor(""); cargar();
     } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
@@ -80,15 +102,28 @@ export function ComprasView({ negocio, puedeCrear = true, puedeEliminar = true }
               </select>
             </div>
             <div><label>{t("compras.nameIfOther")}</label><input value={l.nombre} onChange={(e) => setL({ ...l, nombre: e.target.value })} disabled={!!l.productoId} /></div>
-            <div><label>{t("compras.quantity")}</label><input type="number" step="0.001" min="0" value={l.cantidad} onChange={(e) => setL({ ...l, cantidad: e.target.value })} /></div>
-            <div><label>{t("compras.unitCost")}</label><input type="number" step="0.01" min="0" value={l.costoUnit} onChange={(e) => setL({ ...l, costoUnit: e.target.value })} /></div>
+            <div>
+              <label>{esLiquido ? t("compras.units") : t("compras.quantity")}</label>
+              <input type="number" step={esLiquido ? "1" : "0.001"} min="0" value={l.cantidad} onChange={(e) => setL({ ...l, cantidad: e.target.value })} />
+            </div>
+            <div>
+              <label>{esLiquido ? t("compras.costPerUnit") : t("compras.unitCost")}</label>
+              <input type="number" step="0.01" min="0" value={l.costoUnit} onChange={(e) => setL({ ...l, costoUnit: e.target.value })} />
+            </div>
           </div>
+          {esLiquido && Number(l.cantidad) > 0 && (
+            <p className="muted small" style={{ marginTop: 4 }}>
+              = {Number(l.cantidad) * volSel} ml {t("compras.total").toLowerCase()} ({volSel} ml {t("pos.each")})
+            </p>
+          )}
           <button type="button" className="ghost" style={{ marginTop: 8 }} onClick={agregarLinea}>{t("compras.addLine")}</button>
         </div>
 
         {lineas.map((x, i) => (
           <div className="list-item" key={i}>
-            <div>{x.cantidad}× {x.nombre} {x.productoId ? <span className="badge ok">{t("compras.stockUp")}</span> : null}</div>
+            <div>
+              {x.unidades != null ? `${x.unidades} × ${x.mlTotal! / x.unidades}ml (${x.mlTotal}ml)` : `${x.cantidad}×`} {x.nombre} {x.productoId ? <span className="badge ok">{t("compras.stockUp")}</span> : null}
+            </div>
             <div className="row"><strong>{money(x.cantidad * x.costoUnit)}</strong><button type="button" className="ghost small" onClick={() => setLineas((xs) => xs.filter((_, k) => k !== i))}>✕</button></div>
           </div>
         ))}
@@ -116,7 +151,13 @@ export function ComprasView({ negocio, puedeCrear = true, puedeEliminar = true }
                   {puedeEliminar && <button type="button" className="ghost small" onClick={() => borrar(c.id)}>✕</button>}
                 </div>
               </div>
-              <p className="muted small" style={{ margin: "0 0 6px" }}>{c.lineas.map((x) => `${x.cantidad}× ${x.nombre}`).join(" · ")}</p>
+              <p className="muted small" style={{ margin: "0 0 6px" }}>
+                {c.lineas.map((x) => {
+                  const prod = productos.find((p) => p.id === x.productoId);
+                  const esLiq = prod && prod.volumenMl != null && num(prod.volumenMl) > 0;
+                  return `${x.cantidad}${esLiq ? "ml" : "×"} ${x.nombre}`;
+                }).join(" · ")}
+              </p>
             </div>
           ))}
         </div>

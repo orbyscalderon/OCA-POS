@@ -28,10 +28,21 @@ const compraSchema = z.object({
 // Aplica el efecto de "recibir": suma stock y actualiza el costo de cada producto vinculado,
 // más el movimiento en el ledger. Se usa tanto al crear una compra ya recibida como al recibir
 // una orden pendiente más tarde.
+//
+// Para un líquido, `cantidad` son los ml reales que entran (unidades × ml por botella, ya
+// calculado en el frontend) y `costoUnit` es el costo POR ML — consistente con `cantidad *
+// costoUnit = total de la línea`. Pero `producto.costo` para un líquido siempre representa el
+// costo del POTE COMPLETO (así lo usa el resto del sistema: costoPorMl = costo/volumenMl), así
+// que hay que reconvertir costoUnit × volumenMl antes de guardarlo — guardar costoUnit tal cual
+// dejaría el costo del producto ~100x más chico de lo real.
 async function recibirLineas(tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0], compraId: string, lineas: { productoId: string | null; costoUnit: unknown; cantidad: unknown }[]) {
   for (const l of lineas) {
     if (!l.productoId) continue;
-    await tx.producto.update({ where: { id: l.productoId }, data: { stock: { increment: l.cantidad as number }, costo: l.costoUnit as number } });
+    const prod = await tx.producto.findUnique({ where: { id: l.productoId }, select: { volumenMl: true } });
+    const vol = prod?.volumenMl != null ? Number(prod.volumenMl) : 0;
+    const costoUnit = l.costoUnit as number;
+    const nuevoCosto = vol > 0 ? costoUnit * vol : costoUnit;
+    await tx.producto.update({ where: { id: l.productoId }, data: { stock: { increment: l.cantidad as number }, costo: nuevoCosto } });
     await tx.movimientoStock.create({ data: { productoId: l.productoId, tipo: "entrada", cantidad: Math.abs(l.cantidad as number), motivo: `Compra ${compraId.slice(-6)}` } });
   }
 }

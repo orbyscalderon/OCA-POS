@@ -17,6 +17,8 @@ interface Producto {
   notasTecnicas: string | null;
   // Trazabilidad de lote/vencimiento (farmacia, panadería, perecederos).
   loteNumero: string | null; fechaVencimiento: string | null;
+  // Sabor/variante de una línea (ej. "Recargas": Mango, Fresa...) — apunta al producto base.
+  varianteBaseId: string | null;
 }
 interface Sesion { id: string; montoInicial: string | number; abiertaEn: string; estado: string }
 interface LineaVentaRecibo { nombre: string; cantidad: string | number; precioUnit: string | number; subtotal: string | number }
@@ -468,13 +470,13 @@ interface FormProducto {
   nombre: string; sku: string; categoria: string; precioVenta: string; impuestoPct: string; stock: string; unidad: string; stockMinimo: string;
   volumenMl: string; nicotinaMg: string; productoFuenteId: string; rendimientoPorVenta: string;
   costo: string; tipoProducto: "consumible" | "hardware"; notasTecnicas: string;
-  loteNumero: string; fechaVencimiento: string;
+  loteNumero: string; fechaVencimiento: string; varianteBaseId: string;
 }
 const formVacio: FormProducto = {
   nombre: "", sku: "", categoria: "", precioVenta: "", impuestoPct: "0", stock: "0", unidad: "UND", stockMinimo: "0",
   volumenMl: "", nicotinaMg: "", productoFuenteId: "", rendimientoPorVenta: "",
   costo: "", tipoProducto: "consumible", notasTecnicas: "",
-  loteNumero: "", fechaVencimiento: "",
+  loteNumero: "", fechaVencimiento: "", varianteBaseId: "",
 };
 function formDeProducto(p: Producto): FormProducto {
   return {
@@ -483,6 +485,7 @@ function formDeProducto(p: Producto): FormProducto {
     productoFuenteId: p.productoFuenteId ?? "", rendimientoPorVenta: p.rendimientoPorVenta != null ? String(num(p.rendimientoPorVenta)) : "",
     costo: p.costo != null ? String(num(p.costo)) : "", tipoProducto: p.tipoProducto, notasTecnicas: p.notasTecnicas ?? "",
     loteNumero: p.loteNumero ?? "", fechaVencimiento: p.fechaVencimiento ? p.fechaVencimiento.slice(0, 10) : "",
+    varianteBaseId: p.varianteBaseId ?? "",
   };
 }
 
@@ -514,9 +517,20 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
         <div><label>{t("pos.salePrice")}</label><input type="number" step="0.01" min="0" value={f.precioVenta} onChange={(e) => onChange({ ...f, precioVenta: e.target.value })} required /></div>
         <div><label>{t("pos.cost")}</label><input type="number" step="0.01" min="0" value={f.costo} onChange={(e) => onChange({ ...f, costo: e.target.value })} placeholder="0.00" /></div>
         <div><label>{t("pos.taxPct")}</label><input type="number" step="0.01" min="0" value={f.impuestoPct} onChange={(e) => onChange({ ...f, impuestoPct: e.target.value })} /></div>
-        {incluirStockInicial && <div><label>{t("pos.initialStock")}</label><input type="number" step="0.001" value={f.stock} onChange={(e) => onChange({ ...f, stock: e.target.value })} /></div>}
-        <div><label>{t("pos.minStock")}</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
         <div><label>{t("pos.volumeMl")}</label><input type="number" step="0.01" min="0" value={f.volumenMl} onChange={(e) => onChange({ ...f, volumenMl: e.target.value })} placeholder="30" /></div>
+        {incluirStockInicial && (
+          vol > 0 ? (
+            <div>
+              <label>{t("pos.initialUnits")}</label>
+              <input type="number" step="1" min="0" value={f.stock && Number(f.stock) > 0 ? String(Number(f.stock) / vol) : ""}
+                onChange={(e) => onChange({ ...f, stock: String(Number(e.target.value || 0) * vol) })} placeholder="5" />
+              <p className="muted small" style={{ margin: "2px 0 0" }}>{t("pos.initialUnitsHint")}: {Number(f.stock || 0)} ml</p>
+            </div>
+          ) : (
+            <div><label>{t("pos.initialStock")}</label><input type="number" step="0.001" value={f.stock} onChange={(e) => onChange({ ...f, stock: e.target.value })} /></div>
+          )
+        )}
+        <div><label>{t("pos.minStock")}</label><input type="number" step="0.001" min="0" value={f.stockMinimo} onChange={(e) => onChange({ ...f, stockMinimo: e.target.value })} /></div>
         <div><label>{t("pos.nicotineMg")}</label><input type="number" step="0.01" min="0" value={f.nicotinaMg} onChange={(e) => onChange({ ...f, nicotinaMg: e.target.value })} placeholder="6" /></div>
       </div>
       {margenPorMl != null && (
@@ -552,6 +566,74 @@ function CamposProducto({ f, onChange, incluirStockInicial, otrosProductos, prop
         <div><label>{t("pos.expiryDate")}</label><input type="date" value={f.fechaVencimiento} onChange={(e) => onChange({ ...f, fechaVencimiento: e.target.value })} /></div>
       </div>
     </>
+  );
+}
+
+// Sabores de la línea: agregar rápido nuevas variantes de un producto ya creado (ej. "Recargas"
+// → Mango, Fresa, Menta), sin volver a llenar todo el formulario — clona categoría, volumen,
+// tipo, nicotina y notas técnicas del producto actual; solo pide lo que cambia por sabor.
+function SaboresDeLinea({ negocioId, base, todos, onCambio }: { negocioId: string; base: Producto; todos: Producto[]; onCambio: () => void }) {
+  const { t } = useT();
+  const baseId = base.varianteBaseId ?? base.id;
+  const sabores = todos.filter((x) => x.id !== base.id && (x.varianteBaseId === baseId || x.id === baseId));
+  const esLiquido = base.volumenMl != null && num(base.volumenMl) > 0;
+  const vol = num(base.volumenMl);
+
+  const [nombre, setNombre] = useState("");
+  const [precioVenta, setPrecioVenta] = useState(String(num(base.precioVenta)));
+  const [costo, setCosto] = useState(base.costo != null ? String(num(base.costo)) : "");
+  const [stockInput, setStockInput] = useState("");
+  const [error, setError] = useState("");
+  const [guardando, setGuardando] = useState(false);
+
+  async function agregar(e: React.FormEvent) {
+    e.preventDefault(); setError("");
+    if (!nombre.trim()) return;
+    setGuardando(true);
+    try {
+      const stock = esLiquido ? Number(stockInput || 0) * vol : Number(stockInput || 0);
+      await api.post("/inventario", {
+        negocioId, nombre: nombre.trim(), categoria: base.categoria ?? undefined,
+        precioVenta, costo: costo || undefined, impuestoPct: String(num(base.impuestoPct)),
+        volumenMl: base.volumenMl ?? undefined, nicotinaMg: base.nicotinaMg ?? undefined,
+        tipoProducto: base.tipoProducto, notasTecnicas: base.notasTecnicas ?? undefined,
+        stock, varianteBaseId: baseId,
+      });
+      setNombre(""); setStockInput("");
+      onCambio();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : t("common.error"));
+    } finally {
+      setGuardando(false);
+    }
+  }
+
+  return (
+    <div className="card" style={{ background: "var(--surface-3)", marginTop: 10 }}>
+      <strong className="small">{t("pos.flavorsTitle")}</strong>
+      <p className="muted small" style={{ margin: "2px 0 8px" }}>{t("pos.flavorsHelp")}</p>
+      {sabores.length > 0 && (
+        <div style={{ marginBottom: 8 }}>
+          {sabores.map((s) => (
+            <div className="list-item" key={s.id}>
+              <span>{s.nombre}</span>
+              <span className="muted small">{money(s.precioVenta)} · {t("pos.stock")}: {num(s.stock)} {esLiquido ? "ml" : s.unidad}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <form onSubmit={agregar} className="grid grid-2">
+        <div><label>{t("pos.flavorName")}</label><input value={nombre} onChange={(e) => setNombre(e.target.value)} placeholder={t("pos.flavorNamePh")} required /></div>
+        <div><label>{t("pos.salePrice")}</label><input type="number" step="0.01" min="0" value={precioVenta} onChange={(e) => setPrecioVenta(e.target.value)} required /></div>
+        <div><label>{t("pos.cost")}</label><input type="number" step="0.01" min="0" value={costo} onChange={(e) => setCosto(e.target.value)} placeholder="0.00" /></div>
+        <div>
+          <label>{esLiquido ? t("pos.initialUnits") : t("pos.initialStock")}</label>
+          <input type="number" step={esLiquido ? "1" : "0.001"} min="0" value={stockInput} onChange={(e) => setStockInput(e.target.value)} placeholder={esLiquido ? "1" : "0"} />
+        </div>
+        {error && <p className="error small" style={{ gridColumn: "1 / -1" }}>{error}</p>}
+        <button className="primary small" style={{ gridColumn: "1 / -1" }} disabled={guardando}>{t("pos.flavorAdd")}</button>
+      </form>
+    </div>
   );
 }
 
@@ -658,6 +740,7 @@ export function Productos({ negocio }: { negocio: Negocio }) {
       notasTecnicas: datos.notasTecnicas === "" ? null : datos.notasTecnicas,
       loteNumero: datos.loteNumero === "" ? null : datos.loteNumero,
       fechaVencimiento: datos.fechaVencimiento === "" ? null : datos.fechaVencimiento,
+      varianteBaseId: datos.varianteBaseId === "" ? null : datos.varianteBaseId,
     };
   }
 
@@ -690,8 +773,21 @@ export function Productos({ negocio }: { negocio: Negocio }) {
   }
 
   async function ajustar(p: Producto, tipo: "entrada" | "salida") {
+    const vol = num(p.volumenMl);
+    const esLiquido = p.volumenMl != null && vol > 0;
+    // Al líquido le entran botellas enteras, no ml sueltos — se pregunta cuántas unidades
+    // entraron y se calculan solos los ml reales (unidades × ml por botella), en vez de
+    // obligar a hacer la cuenta a mano cada vez que llega mercancía.
+    if (tipo === "entrada" && esLiquido) {
+      const v = prompt(`${t("pos.stockInPrompt")} "${p.nombre}" — ${t("pos.unitsBottlesPrompt")} (${vol} ml ${t("pos.each")}):`);
+      if (!v || !Number(v)) return;
+      const cantidad = Number(v) * vol;
+      await api.post(`/inventario/${p.id}/stock`, { tipo, cantidad, motivo: `${tipo}: ${v} ${t("pos.unitsShort")}` });
+      cargar();
+      return;
+    }
     const etiqueta = tipo === "entrada" ? t("pos.stockInPrompt") : t("pos.stockOutPrompt");
-    const v = prompt(`${etiqueta} ${t("pos.stockPromptSuffix")} "${p.nombre}" (${t("pos.quantity")}):`);
+    const v = prompt(`${etiqueta} ${t("pos.stockPromptSuffix")} "${p.nombre}" (${t("pos.quantity")}${esLiquido ? " en ml" : ""}):`);
     if (!v) return;
     await api.post(`/inventario/${p.id}/stock`, { tipo, cantidad: Number(v), motivo: tipo });
     cargar();
@@ -718,15 +814,18 @@ export function Productos({ negocio }: { negocio: Negocio }) {
           const bajo = num(p.stock) <= num(p.stockMinimo);
           if (editandoId === p.id) {
             return (
-              <form key={p.id} onSubmit={guardarEdicion} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
-                <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} otrosProductos={productos} propioId={p.id} />
-                <FotoProducto producto={p} onSubido={cargar} />
-                {error && <p className="error small">{error}</p>}
-                <div className="row" style={{ marginTop: 10 }}>
-                  <button className="primary">{t("pos.saveChanges")}</button>
-                  <button type="button" className="ghost" onClick={() => setEditandoId(null)}>{t("common.cancel")}</button>
-                </div>
-              </form>
+              <div key={p.id}>
+                <form onSubmit={guardarEdicion} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
+                  <CamposProducto f={fe} onChange={setFe} incluirStockInicial={false} otrosProductos={productos} propioId={p.id} />
+                  <FotoProducto producto={p} onSubido={cargar} />
+                  {error && <p className="error small">{error}</p>}
+                  <div className="row" style={{ marginTop: 10 }}>
+                    <button className="primary">{t("pos.saveChanges")}</button>
+                    <button type="button" className="ghost" onClick={() => setEditandoId(null)}>{t("common.cancel")}</button>
+                  </div>
+                </form>
+                <SaboresDeLinea negocioId={negocio.id} base={p} todos={productos} onCambio={cargar} />
+              </div>
             );
           }
           const fuente = p.productoFuenteId ? productos.find((x) => x.id === p.productoFuenteId) : null;

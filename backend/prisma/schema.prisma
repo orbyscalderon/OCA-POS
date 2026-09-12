@@ -388,6 +388,14 @@ model Producto {
   rendimientoPorVenta Decimal?   @map("rendimiento_por_venta") @db.Decimal(8, 3)
   recargas            Producto[] @relation("ProductoFuente")
 
+  // Sabores de una misma línea (ej. "Recargas" con variantes Mango/Fresa/Menta): cada sabor
+  // sigue siendo su propio Producto, con su propio stock/costo/precio (se descuentan
+  // independientemente al vender) — esto solo los agrupa para poder agregarlos rápido desde
+  // uno ya creado y para que buscar el nombre de la línea encuentre todos sus sabores.
+  varianteBaseId String?    @map("variante_base_id")
+  varianteBase   Producto?  @relation("VariantesSabor", fields: [varianteBaseId], references: [id], onDelete: SetNull)
+  sabores        Producto[] @relation("VariantesSabor")
+
   movimientos  MovimientoStock[]
   lineasVenta  LineaVenta[]
   lineasCompra LineaCompra[]
@@ -395,6 +403,7 @@ model Producto {
   @@index([negocioId])
   @@index([loteId])
   @@index([productoFuenteId])
+  @@index([varianteBaseId])
   @@map("productos")
 }
 

@@ -10,7 +10,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { paginationSchema, paginar, metaPaginacion } from "../lib/pagination.js";
 import { calcularSplitFianza } from "../lib/split.js";
 import { limitePeluqueros, limiteNegocios } from "../lib/planes.js";
-import { SLUGS_PERFIL } from "../config/perfiles.js";
+import { SLUGS_PERFIL, getPerfil } from "../config/perfiles.js";
 import { requireAcceso, ROLES_ASIGNABLES, PLANTILLAS, PERMISOS_CONTABILIDAD, permisoSchema } from "../lib/acceso.js";
 import { hashPassword, verifyPassword } from "../lib/auth.js";
 import { enviarEmail, emailSolicitudFuncion } from "../lib/email.js";
@@ -279,6 +279,9 @@ const actualizarNegocioSchema = z.object({
   // Fidelización: cuántos puntos da cada venta y cuántos hacen falta para el premio.
   puntosPorVenta: z.coerce.number().int().min(0).max(1000).optional(),
   puntosParaPremio: z.coerce.number().int().min(1).max(100000).optional(),
+  // Cambiar de rubro (motor de nicho): reactiva los módulos de ese rubro para este mismo
+  // negocio, en vez de tener que crear uno nuevo (útil sobre todo con plan de 1 solo negocio).
+  perfil: z.string().refine((v) => SLUGS_PERFIL.includes(v), "Rubro inválido").optional(),
 });
 
 negociosRouter.patch(
@@ -288,6 +291,12 @@ negociosRouter.patch(
   asyncHandler(async (req, res) => {
     await assertDueno(req.params.id, req.user!.sub);
     const data = actualizarNegocioSchema.parse(req.body);
+    // Si cambia el rubro y no se mandó categoría a mano, se actualiza también la categoría
+    // para que quede consistente con el rubro nuevo (cada rubro tiene la suya "de fábrica").
+    if (data.perfil && !data.categoria) {
+      const perfilNuevo = getPerfil(data.perfil);
+      if (perfilNuevo) data.categoria = perfilNuevo.categoria;
+    }
     const negocio = await prisma.negocio.update({ where: { id: req.params.id }, data });
     res.json({ negocio });
   }),

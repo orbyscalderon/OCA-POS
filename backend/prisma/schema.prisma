@@ -140,6 +140,7 @@ model Negocio {
   ventas              Venta[]
   sesionesCaja        SesionCaja[]
   lotesAgro           LoteBiologico[]
+  granjas             Granja[]
   mesas               Mesa[]
   comandas            Comanda[]
   ordenesServicio     OrdenServicio[]
@@ -235,25 +236,68 @@ model ClienteNegocio {
 // ============================================================
 //  MÓDULO: AGRO (granja avícola: lotes biológicos)
 // ============================================================
+// Jerarquía opcional Empresa (Negocio) > Granja > Galpón/Nave > Lote. Un lote puede seguir
+// sin granja/galpón asignado (negocios chicos con un solo sitio no necesitan la jerarquía) —
+// por eso LoteBiologico.galponId es nullable y no rompe los lotes que ya existían antes de esto.
+model Granja {
+  id        String   @id @default(cuid())
+  negocioId String   @map("negocio_id")
+  negocio   Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  nombre    String   @db.VarChar(120)
+  direccion String?  @db.VarChar(200)
+  notas     String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  galpones Galpon[]
+
+  @@index([negocioId])
+  @@map("granjas")
+}
+
+model Galpon {
+  id            String   @id @default(cuid())
+  granjaId      String   @map("granja_id")
+  granja        Granja   @relation(fields: [granjaId], references: [id], onDelete: Cascade)
+  nombre        String   @db.VarChar(120)
+  capacidadAves Int?     @map("capacidad_aves")
+  notas         String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  lotes LoteBiologico[]
+
+  @@index([granjaId])
+  @@map("galpones")
+}
+
 model LoteBiologico {
   id              String   @id @default(cuid())
   negocioId       String   @map("negocio_id")
   negocio         Negocio  @relation(fields: [negocioId], references: [id], onDelete: Cascade)
+  // Ubicación opcional dentro de la jerarquía Granja > Galpón — null = lote "suelto", sigue
+  // funcionando igual que antes de agregar esto.
+  galponId        String?  @map("galpon_id")
+  galpon          Galpon?  @relation(fields: [galponId], references: [id], onDelete: SetNull)
   nombre          String   @db.VarChar(120)
   especie         String   @default("broiler") @db.VarChar(20) // broiler | layer
   tipoProduccion  String   @default("meat") @map("tipo_produccion") @db.VarChar(20) // meat | eggs
   cantidadInicial Int      @map("cantidad_inicial")
   fechaInicio     DateTime @map("fecha_inicio")
   costoInicial    Decimal? @map("costo_inicial") @db.Decimal(12, 2)
+  // Línea genética (cobb500, ross308, lohmann_brown…) — habilita comparar el lote contra la
+  // curva estándar del proveedor (peso objetivo por edad, % de postura objetivo). Null = sin
+  // comparativa, el lote sigue funcionando igual con solo sus propios indicadores reales.
+  lineaGenetica   String?  @map("linea_genetica") @db.VarChar(30)
   estado          String   @default("activo") @db.VarChar(10) // activo | cerrado
   notas           String?  @db.Text
   createdAt       DateTime @default(now()) @map("created_at")
 
-  registros RegistroAgro[]
-  gastos    Gasto[]
-  productos Producto[]
+  registros         RegistroAgro[]
+  gastos            Gasto[]
+  productos         Producto[]
+  eventosSanitarios EventoSanitario[]
 
   @@index([negocioId])
+  @@index([galponId])
   @@map("lotes_biologicos")
 }
 
@@ -265,12 +309,39 @@ model RegistroAgro {
   mortalidad    Int           @default(0)
   alimentoKg    Decimal       @default(0) @map("alimento_kg") @db.Decimal(12, 3)
   pesoPromedioG Decimal?      @map("peso_promedio_g") @db.Decimal(12, 3)
-  produccion    Int           @default(0) // huevos u otra unidad producida ese día
+  produccion    Int           @default(0) // huevos u otra unidad producida ese día (total = suma de calibres si se cargaron)
+  // Clasificación de huevos por calibre comercial (solo lotes de postura) — todo opcional,
+  // si no se usa el registro sigue funcionando solo con "produccion" como antes.
+  huevosJumbo   Int           @default(0) @map("huevos_jumbo")
+  huevosExtra   Int           @default(0) @map("huevos_extra")
+  huevosGrande  Int           @default(0) @map("huevos_grande")
+  huevosMediano Int           @default(0) @map("huevos_mediano")
+  huevosPequeno Int           @default(0) @map("huevos_pequeno")
+  huevosRotos   Int           @default(0) @map("huevos_rotos")
+  huevosSucios  Int           @default(0) @map("huevos_sucios")
   notas         String?       @db.VarChar(200)
 
   @@unique([loteId, fecha])
   @@index([loteId])
   @@map("registros_agro")
+}
+
+// Sanidad: vacunas, tratamientos y síntomas del lote. Algunos medicamentos exigen un
+// "periodo de retiro" (días sin poder vender/sacrificar) — se guarda acá para poder
+// avisar en el lote mientras ese periodo sigue activo.
+model EventoSanitario {
+  id         String        @id @default(cuid())
+  loteId     String        @map("lote_id")
+  lote       LoteBiologico @relation(fields: [loteId], references: [id], onDelete: Cascade)
+  tipo       String        @db.VarChar(20) // vacuna | tratamiento | sintoma | otro
+  nombre     String        @db.VarChar(120)
+  fecha      DateTime
+  diasRetiro Int?          @map("dias_retiro")
+  notas      String?       @db.VarChar(300)
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  @@index([loteId])
+  @@map("eventos_sanitarios")
 }
 
 // ============================================================

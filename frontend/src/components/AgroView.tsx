@@ -1,23 +1,71 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio, type RolNegocio } from "../api";
-import { Stat } from "./Ui";
+import { Stat, usePrompt } from "./Ui";
 import { hoyLocal, formatFechaLocal } from "../dateUtils";
 import { useT, type TKey } from "../i18n";
 
 // Módulo AGRO (granja avícola): lotes/camadas con mortalidad, alimento, conversión (FCR)
 // y costeo real (alimento, sanidad, mano de obra…) para saber el margen de cada venta.
+interface GalponRef { id: string; nombre: string; granja: { id: string; nombre: string } }
 interface LoteResumen {
   id: string; nombre: string; especie: string; tipoProduccion: string; cantidadInicial: number;
-  estado: string; avesVivas: number; mortalidadPct: number; alimentoTotalKg: number; produccionTotal: number; edadDias: number; fcr: number | null;
+  estado: string; lineaGenetica: string | null; galpon: GalponRef | null;
+  avesVivas: number; mortalidadPct: number; alimentoTotalKg: number; produccionTotal: number; edadDias: number; fcr: number | null;
+  gdp: number | null; iee: number | null; pesoEstandarG: number | null; desvioPesoPct: number | null;
+  hdpPromedio: number | null; hhhPromedio: number | null; hdpEstandar: number | null;
+  huevosBuenosTotal: number; huevosRotosTotal: number; huevosSuciosTotal: number;
+  fechaLibreRetiro: string | null; enRetiro: boolean; alertaConsumo: boolean;
   costoTotal: number; costoPorAve: number; costoPorKg: number | null; ingresoTotal: number; margen: number; margenPct: number | null;
 }
-interface Registro { id: string; fecha: string; mortalidad: number; alimentoKg: string | number; pesoPromedioG: string | number | null; produccion: number; notas: string | null }
+interface Galpon { id: string; nombre: string; capacidadAves: number | null; _count: { lotes: number } }
+interface Granja { id: string; nombre: string; direccion: string | null; galpones: Galpon[] }
+interface PuntoComparativa { edadDias: number; real: number | null; estandar: number | null }
+interface Registro {
+  id: string; fecha: string; mortalidad: number; alimentoKg: string | number; pesoPromedioG: string | number | null;
+  produccion: number; notas: string | null;
+  huevosJumbo: number; huevosExtra: number; huevosGrande: number; huevosMediano: number; huevosPequeno: number;
+  huevosRotos: number; huevosSucios: number;
+}
 interface Costo { id: string; tipoCosto: string | null; categoria: string | null; descripcion: string; monto: string | number; fecha: string }
 interface ProductoLote { id: string; nombre: string; precioVenta: string | number; stock: string | number }
 interface TipoCosto { value: string; label: string }
+interface Evento { id: string; tipo: string; nombre: string; fecha: string; diasRetiro: number | null; notas: string | null }
+interface LineaGenetica { slug: string; nombre: string; especie: string }
 const hoy = hoyLocal;
 const fecha = formatFechaLocal;
 const money = (n: number | string) => `$${Number(n).toFixed(2)}`;
+
+// Gráfico de línea liviano sin dependencias — compara el valor real diario contra la curva
+// estándar de la línea genética (peso para engorde, % de postura para ponedoras).
+function MiniChart({ serie, labelReal, labelEstandar }: { serie: PuntoComparativa[]; labelReal: string; labelEstandar: string }) {
+  const W = 600, H = 160, PAD = 22;
+  const xs = serie.map((p) => p.edadDias);
+  const ys = serie.flatMap((p) => [p.real, p.estandar]).filter((v): v is number => v != null);
+  if (ys.length === 0) return null;
+  const xMin = Math.min(...xs), xMax = Math.max(...xs);
+  const yMin = Math.min(0, ...ys), yMax = Math.max(...ys);
+  const xScale = (x: number) => PAD + ((x - xMin) / Math.max(1, xMax - xMin)) * (W - PAD * 2);
+  const yScale = (y: number) => H - PAD - ((y - yMin) / Math.max(1, yMax - yMin)) * (H - PAD * 2);
+  const pathFor = (key: "real" | "estandar") => {
+    const pts = serie.filter((p) => p[key] != null);
+    if (pts.length < 2) return "";
+    return pts.map((p, i) => `${i === 0 ? "M" : "L"} ${xScale(p.edadDias).toFixed(1)} ${yScale(p[key]!).toFixed(1)}`).join(" ");
+  };
+  const dReal = pathFor("real");
+  const dEstandar = pathFor("estandar");
+  return (
+    <div style={{ marginBottom: 12 }}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", display: "block", background: "var(--surface)", borderRadius: 8 }}>
+        {dEstandar && <path d={dEstandar} fill="none" stroke="var(--faint)" strokeWidth="2" strokeDasharray="5 4" />}
+        {dReal && <path d={dReal} fill="none" stroke="var(--brand-400)" strokeWidth="2.5" />}
+      </svg>
+      <div className="row" style={{ gap: 14, marginTop: 4 }}>
+        <span className="small"><span style={{ display: "inline-block", width: 10, height: 3, background: "var(--brand-400)", marginRight: 5 }} />{labelReal}</span>
+        <span className="small muted"><span style={{ display: "inline-block", width: 10, height: 0, borderTop: "2px dashed var(--faint)", marginRight: 5 }} />{labelEstandar}</span>
+      </div>
+    </div>
+  );
+}
 
 // El backend devuelve la etiqueta ya en español (categoria/label): la ignoramos y
 // traducimos localmente a partir del código estable (tipoCosto/value), que no cambia.
@@ -33,18 +81,26 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
   const [lotes, setLotes] = useState<LoteResumen[]>([]);
   const [nuevo, setNuevo] = useState(false);
   const [abierto, setAbierto] = useState<string | null>(null);
-  const [f, setF] = useState({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "" });
+  const [f, setF] = useState({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "", lineaGenetica: "", galponId: "" });
+  const [lineas, setLineas] = useState<LineaGenetica[]>([]);
+  const [granjas, setGranjas] = useState<Granja[]>([]);
   const [error, setError] = useState("");
 
   function cargar() { api.get<{ lotes: LoteResumen[] }>(`/agro/lotes?negocioId=${negocio.id}`).then((r) => setLotes(r.lotes)).catch(() => {}); }
+  function cargarGranjas() { api.get<{ granjas: Granja[] }>(`/agro/granjas?negocioId=${negocio.id}`).then((r) => setGranjas(r.granjas)).catch(() => {}); }
   useEffect(cargar, [negocio.id]);
+  useEffect(cargarGranjas, [negocio.id]);
+  useEffect(() => {
+    api.get<{ lineas: LineaGenetica[] }>(`/agro/lineas-geneticas?especie=${f.especie}`).then((r) => setLineas(r.lineas)).catch(() => {});
+    setF((prev) => ({ ...prev, lineaGenetica: "" }));
+  }, [f.especie]);
 
   async function crear(e: React.FormEvent) {
     e.preventDefault(); setError("");
     try {
-      await api.post("/agro/lotes", { ...f, negocioId: negocio.id, costoInicial: f.costoInicial || undefined });
-      setF({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "" });
-      setNuevo(false); cargar();
+      await api.post("/agro/lotes", { ...f, negocioId: negocio.id, costoInicial: f.costoInicial || undefined, lineaGenetica: f.lineaGenetica || undefined, galponId: f.galponId || undefined });
+      setF({ nombre: "", especie: "broiler", tipoProduccion: "meat", cantidadInicial: "", fechaInicio: hoy(), costoInicial: "", lineaGenetica: "", galponId: "" });
+      setNuevo(false); cargar(); cargarGranjas();
     } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
@@ -74,10 +130,56 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
             <div><label>{t("agro.initialQty")}</label><input type="number" min="1" value={f.cantidadInicial} onChange={(e) => setF({ ...f, cantidadInicial: e.target.value })} required /></div>
             <div><label>{t("agro.entryDate")}</label><input type="date" value={f.fechaInicio} onChange={(e) => setF({ ...f, fechaInicio: e.target.value })} required /></div>
             <div><label>{t("agro.chickCost")}</label><input type="number" step="0.01" min="0" value={f.costoInicial} onChange={(e) => setF({ ...f, costoInicial: e.target.value })} placeholder="0.00" /></div>
+            <div><label>{t("agro.geneticLine")}</label>
+              <select value={f.lineaGenetica} onChange={(e) => setF({ ...f, lineaGenetica: e.target.value })}>
+                <option value="">{t("agro.geneticLineNone")}</option>
+                {lineas.map((ln) => <option key={ln.slug} value={ln.slug}>{ln.nombre}</option>)}
+              </select>
+            </div>
+            <div><label>{t("agro.location")}</label>
+              <select value={f.galponId} onChange={(e) => setF({ ...f, galponId: e.target.value })}>
+                <option value="">{t("agro.noLocation")}</option>
+                {granjas.map((g) => (
+                  <optgroup key={g.id} label={g.nombre}>
+                    {g.galpones.map((gp) => <option key={gp.id} value={gp.id}>{gp.nombre}</option>)}
+                  </optgroup>
+                ))}
+              </select>
+            </div>
           </div>
           {error && <p className="error small">{error}</p>}
           <button className="primary" style={{ marginTop: 10 }}>{t("agro.createLot")}</button>
         </form>
+      )}
+
+      <GestionGranjas negocioId={negocio.id} granjas={granjas} onCambio={() => { cargarGranjas(); cargar(); }} />
+
+      {lotes.length >= 2 && (
+        <div style={{ overflowX: "auto", marginTop: 12 }}>
+          <h3 style={{ margin: "0 0 6px" }}>{t("agro.compareTitle")}</h3>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead><tr style={{ textAlign: "left", color: "var(--faint)" }}>
+              <th style={{ padding: "4px 6px" }}>{t("agro.colLot")}</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.mortality")}</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colFcr")}</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colIee")}</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.costPerKg")}</th>
+              <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colMarginPct")}</th>
+            </tr></thead>
+            <tbody>
+              {lotes.map((l) => (
+                <tr key={l.id} style={{ borderTop: "1px solid var(--border)" }}>
+                  <td style={{ padding: "4px 6px" }}>{l.nombre}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right" }}>{l.mortalidadPct}%</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right" }}>{l.fcr ?? "—"}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right" }}>{l.iee ?? "—"}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right" }}>{l.costoPorKg != null ? money(l.costoPorKg) : "—"}</td>
+                  <td style={{ padding: "4px 6px", textAlign: "right" }}>{l.margenPct != null ? `${l.margenPct}%` : "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
 
       {lotes.length === 0 ? (
@@ -88,7 +190,10 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
             <div className="row spread">
               <div>
                 <h3 style={{ margin: 0 }}>{l.nombre}</h3>
-                <span className="muted small">{l.especie === "broiler" ? t("agro.raising") : t("agro.laying")} · {l.tipoProduccion === "meat" ? t("agro.meat").toLowerCase() : t("agro.eggs").toLowerCase()} · {l.edadDias} {t("agro.days")}</span>
+                <span className="muted small">
+                  {l.especie === "broiler" ? t("agro.raising") : t("agro.laying")} · {l.tipoProduccion === "meat" ? t("agro.meat").toLowerCase() : t("agro.eggs").toLowerCase()} · {l.edadDias} {t("agro.days")}
+                  {l.galpon && ` · ${l.galpon.granja.nombre} — ${l.galpon.nombre}`}
+                </span>
               </div>
               <span className={`badge ${l.estado === "cerrado" ? "" : "ok"}`}>{l.estado}</span>
             </div>
@@ -98,7 +203,25 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
               <span className="badge">{t("agro.feed")}: {l.alimentoTotalKg} kg</span>
               {l.tipoProduccion === "eggs" && <span className="badge">{t("agro.eggsLabel")}: {l.produccionTotal}</span>}
               {l.fcr != null && <span className="badge">FCR: {l.fcr}</span>}
+              {l.gdp != null && <span className="badge">{t("agro.gdp")}: {l.gdp}</span>}
+              {l.iee != null && <span className="badge">{t("agro.iee")}: {l.iee}</span>}
+              {l.desvioPesoPct != null && (
+                <span className={`badge ${Math.abs(l.desvioPesoPct) <= 5 ? "ok" : "warn"}`}>{t("agro.weightVsStandard")}: {l.desvioPesoPct > 0 ? "+" : ""}{l.desvioPesoPct}%</span>
+              )}
+              {l.hdpPromedio != null && <span className="badge ok">{t("agro.hdp")}: {l.hdpPromedio}%</span>}
+              {l.hhhPromedio != null && <span className="badge">{t("agro.hhh")}: {l.hhhPromedio}%</span>}
+              {l.hdpEstandar != null && <span className="badge">{t("agro.hdpStandard")}: {l.hdpEstandar}%</span>}
             </div>
+            {l.tipoProduccion === "eggs" && (l.huevosBuenosTotal > 0 || l.huevosRotosTotal > 0 || l.huevosSuciosTotal > 0) && (
+              <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
+                <span className="badge ok">{t("agro.eggsGood")}: {l.huevosBuenosTotal}</span>
+                {l.huevosRotosTotal > 0 && <span className="badge err">{t("agro.eggsBroken")}: {l.huevosRotosTotal}</span>}
+                {l.huevosSuciosTotal > 0 && <span className="badge warn">{t("agro.eggsDirty")}: {l.huevosSuciosTotal}</span>}
+              </div>
+            )}
+            {l.enRetiro && l.fechaLibreRetiro && (
+              <div className="row"><span className="badge err">{t("agro.inWithdrawalUntil")} {fecha(l.fechaLibreRetiro)}</span></div>
+            )}
             <div className="row" style={{ gap: 6, flexWrap: "wrap" }}>
               <span className="badge">{t("agro.totalCost")}: {money(l.costoTotal)}</span>
               {l.costoPorKg != null && <span className="badge">{t("agro.costPerKg")}: {money(l.costoPorKg)}</span>}
@@ -120,28 +243,136 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
   );
 }
 
+function GestionGranjas({ negocioId, granjas, onCambio }: { negocioId: string; granjas: Granja[]; onCambio: () => void }) {
+  const { t } = useT();
+  const { promptConfirmar, modal } = usePrompt();
+  const [abierto, setAbierto] = useState(false);
+  const [nombre, setNombre] = useState("");
+  const [direccion, setDireccion] = useState("");
+  const [error, setError] = useState("");
+  const [galponAbierto, setGalponAbierto] = useState<string | null>(null);
+  const [gNombre, setGNombre] = useState("");
+  const [gCapacidad, setGCapacidad] = useState("");
+
+  async function crearGranja(e: React.FormEvent) {
+    e.preventDefault(); setError("");
+    try {
+      await api.post("/agro/granjas", { negocioId, nombre, direccion: direccion || undefined });
+      setNombre(""); setDireccion(""); onCambio();
+    } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
+  }
+
+  async function borrarGranja(id: string) {
+    if (!(await promptConfirmar(t("agro.deleteFarmConfirm")))) return;
+    await api.del(`/agro/granjas/${id}`);
+    onCambio();
+  }
+
+  async function crearGalpon(e: React.FormEvent, granjaId: string) {
+    e.preventDefault(); setError("");
+    try {
+      await api.post(`/agro/granjas/${granjaId}/galpones`, { nombre: gNombre, capacidadAves: gCapacidad || undefined });
+      setGNombre(""); setGCapacidad(""); setGalponAbierto(null); onCambio();
+    } catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
+  }
+
+  async function borrarGalpon(id: string) {
+    if (!(await promptConfirmar(t("agro.deleteShedConfirm")))) return;
+    await api.del(`/agro/galpones/${id}`);
+    onCambio();
+  }
+
+  return (
+    <div className="card" style={{ marginTop: 12 }}>
+      <div className="row spread">
+        <div>
+          <h3 style={{ margin: 0 }}>{t("agro.farms")}</h3>
+          <p className="muted small" style={{ margin: "2px 0 0" }}>{t("agro.farmsHelp")}</p>
+        </div>
+        <button className="ghost small" onClick={() => setAbierto((v) => !v)}>{abierto ? "▲" : "▼"}</button>
+      </div>
+      {abierto && (
+        <>
+          {granjas.length === 0 ? (
+            <p className="muted small" style={{ marginTop: 10 }}>{t("agro.noFarms")}</p>
+          ) : (
+            granjas.map((g) => (
+              <div key={g.id} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 4, marginTop: 8 }}>
+                <div className="row spread">
+                  <div><strong>{g.nombre}</strong> {g.direccion && <span className="muted small">· {g.direccion}</span>}</div>
+                  <div className="row" style={{ gap: 6 }}>
+                    <button className="ghost small" onClick={() => setGalponAbierto(galponAbierto === g.id ? null : g.id)}>{t("agro.newShed")}</button>
+                    <button className="ghost small" onClick={() => borrarGranja(g.id)}>✕</button>
+                  </div>
+                </div>
+                {g.galpones.length > 0 && (
+                  <div style={{ paddingLeft: 10 }}>
+                    {g.galpones.map((gp) => (
+                      <div key={gp.id} className="row spread small muted" style={{ padding: "3px 0" }}>
+                        <span>🏠 {gp.nombre}{gp.capacidadAves != null ? ` · ${gp.capacidadAves} aves` : ""} · {gp._count.lotes} {t("agro.shedsIn")}</span>
+                        <button className="ghost small" onClick={() => borrarGalpon(gp.id)}>✕</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {galponAbierto === g.id && (
+                  <form onSubmit={(e) => crearGalpon(e, g.id)} className="row" style={{ gap: 6, paddingLeft: 10 }}>
+                    <input value={gNombre} onChange={(e) => setGNombre(e.target.value)} required placeholder={t("agro.shedNamePh")} style={{ flex: 2 }} />
+                    <input type="number" min="0" value={gCapacidad} onChange={(e) => setGCapacidad(e.target.value)} placeholder={t("agro.shedCapacity")} style={{ flex: 1 }} />
+                    <button className="primary small">{t("agro.addShed")}</button>
+                  </form>
+                )}
+              </div>
+            ))
+          )}
+          <form onSubmit={crearGranja} className="row" style={{ gap: 6, marginTop: 10 }}>
+            <input value={nombre} onChange={(e) => setNombre(e.target.value)} required placeholder={t("agro.farmNamePh")} style={{ flex: 2 }} />
+            <input value={direccion} onChange={(e) => setDireccion(e.target.value)} placeholder={t("agro.farmAddress")} style={{ flex: 2 }} />
+            <button className="primary small">{t("agro.createFarm")}</button>
+          </form>
+          {error && <p className="error small">{error}</p>}
+        </>
+      )}
+      {modal}
+    </div>
+  );
+}
+
 function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioId: string; onCambio: () => void }) {
   const { t } = useT();
   const [registros, setRegistros] = useState<Registro[]>([]);
   const [costos, setCostos] = useState<Costo[]>([]);
   const [productosLote, setProductosLote] = useState<ProductoLote[]>([]);
   const [tiposCosto, setTiposCosto] = useState<TipoCosto[]>([]);
+  const [eventos, setEventos] = useState<Evento[]>([]);
+  const [tiposEvento, setTiposEvento] = useState<string[]>([]);
   const [metricas, setMetricas] = useState<LoteResumen | null>(null);
-  const [tab, setTab] = useState<"diario" | "costos" | "productos">("diario");
-  const [r, setR] = useState({ fecha: hoy(), mortalidad: "0", alimentoKg: "0", pesoPromedioG: "", produccion: "0" });
+  const [serieComparativa, setSerieComparativa] = useState<PuntoComparativa[]>([]);
+  const [tab, setTab] = useState<"diario" | "costos" | "productos" | "sanidad">("diario");
+  const [r, setR] = useState({
+    fecha: hoy(), mortalidad: "0", alimentoKg: "0", pesoPromedioG: "", produccion: "0",
+    huevosJumbo: "0", huevosExtra: "0", huevosGrande: "0", huevosMediano: "0", huevosPequeno: "0",
+    huevosRotos: "0", huevosSucios: "0",
+  });
   const [c, setC] = useState({ tipoCosto: "feed", monto: "", fecha: hoy(), descripcion: "" });
+  const [ev, setEv] = useState({ tipo: "vacuna", nombre: "", fecha: hoy(), diasRetiro: "", notas: "" });
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
+  const [errorEvento, setErrorEvento] = useState("");
 
   function cargar() {
     api.get<{
-      lote: { registros: Registro[]; gastos: Costo[]; productos: ProductoLote[] };
+      lote: { registros: Registro[]; gastos: Costo[]; productos: ProductoLote[]; eventosSanitarios: Evento[] };
       metricas: LoteResumen;
+      serieComparativa: PuntoComparativa[];
       tiposCosto: TipoCosto[];
+      tiposEvento: string[];
     }>(`/agro/lotes/${loteId}`)
       .then((res) => {
         setRegistros(res.lote.registros); setCostos(res.lote.gastos);
         setProductosLote(res.lote.productos); setMetricas(res.metricas); setTiposCosto(res.tiposCosto);
+        setEventos(res.lote.eventosSanitarios); setTiposEvento(res.tiposEvento);
+        setSerieComparativa(res.serieComparativa);
       }).catch(() => {});
   }
   useEffect(cargar, [loteId]);
@@ -172,6 +403,20 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
     cargar(); onCambio();
   }
 
+  async function agregarEvento(e: React.FormEvent) {
+    e.preventDefault(); setErrorEvento("");
+    try {
+      await api.post(`/agro/lotes/${loteId}/eventos`, { ...ev, diasRetiro: ev.diasRetiro || undefined });
+      setEv({ tipo: ev.tipo, nombre: "", fecha: hoy(), diasRetiro: "", notas: "" });
+      cargar(); onCambio();
+    } catch (err) { setErrorEvento(err instanceof ApiError ? err.message : t("common.error")); }
+  }
+
+  async function borrarEvento(id: string) {
+    await api.del(`/agro/lotes/${loteId}/eventos/${id}`);
+    cargar(); onCambio();
+  }
+
   async function vincular(productoId: string) {
     if (!productoId) return;
     await api.post(`/agro/lotes/${loteId}/productos/${productoId}`, {});
@@ -196,9 +441,23 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
           {metricas.costoPorKg != null && <Stat label={t("agro.costPerKgStat")} value={money(metricas.costoPorKg)} icon="⚖️" />}
         </div>
       )}
+      {metricas?.enRetiro && metricas.fechaLibreRetiro && (
+        <p className="error small" style={{ marginBottom: 10 }}>{t("agro.inWithdrawalUntil")} {fecha(metricas.fechaLibreRetiro)}</p>
+      )}
+      {metricas?.alertaConsumo && (
+        <p className="error small" style={{ marginBottom: 10 }}>{t("agro.feedDropAlert")}</p>
+      )}
+      {serieComparativa.length >= 2 && metricas && (
+        <MiniChart
+          serie={serieComparativa}
+          labelReal={metricas.tipoProduccion === "meat" ? t("agro.chartRealWeight") : t("agro.chartRealHdp")}
+          labelEstandar={metricas.tipoProduccion === "meat" ? t("agro.chartStandardWeight") : t("agro.chartStandardHdp")}
+        />
+      )}
 
       <div className="tabs" style={{ marginBottom: 10 }}>
         <button className={`tab ${tab === "diario" ? "active" : ""}`} onClick={() => setTab("diario")}>{t("agro.tabDaily")}</button>
+        <button className={`tab ${tab === "sanidad" ? "active" : ""}`} onClick={() => setTab("sanidad")}>{t("agro.tabHealth")}</button>
         <button className={`tab ${tab === "costos" ? "active" : ""}`} onClick={() => setTab("costos")}>{t("agro.tabCosts")}</button>
         <button className={`tab ${tab === "productos" ? "active" : ""}`} onClick={() => setTab("productos")}>{t("agro.tabProducts")}</button>
       </div>
@@ -210,9 +469,29 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
               <div><label>{t("agro.date")}</label><input type="date" value={r.fecha} onChange={(e) => setR({ ...r, fecha: e.target.value })} required /></div>
               <div><label>{t("agro.mortalityBirds")}</label><input type="number" min="0" value={r.mortalidad} onChange={(e) => setR({ ...r, mortalidad: e.target.value })} /></div>
               <div><label>{t("agro.feedKg")}</label><input type="number" step="0.001" min="0" value={r.alimentoKg} onChange={(e) => setR({ ...r, alimentoKg: e.target.value })} /></div>
-              <div><label>{t("agro.avgWeightG")}</label><input type="number" step="0.1" min="0" value={r.pesoPromedioG} onChange={(e) => setR({ ...r, pesoPromedioG: e.target.value })} /></div>
-              <div><label>{t("agro.productionEggs")}</label><input type="number" min="0" value={r.produccion} onChange={(e) => setR({ ...r, produccion: e.target.value })} /></div>
+              {metricas?.tipoProduccion === "meat" && (
+                <div><label>{t("agro.avgWeightG")}</label><input type="number" step="0.1" min="0" value={r.pesoPromedioG} onChange={(e) => setR({ ...r, pesoPromedioG: e.target.value })} /></div>
+              )}
+              {metricas?.tipoProduccion === "eggs" ? (
+                <div><label>{t("agro.productionEggs")}</label><input type="number" min="0" value={r.produccion} onChange={(e) => setR({ ...r, produccion: e.target.value })} placeholder={t("agro.eggBreakdown")} /></div>
+              ) : (
+                <div><label>{t("agro.productionEggs")}</label><input type="number" min="0" value={r.produccion} onChange={(e) => setR({ ...r, produccion: e.target.value })} /></div>
+              )}
             </div>
+            {metricas?.tipoProduccion === "eggs" && (
+              <>
+                <label className="muted small" style={{ marginTop: 8, display: "block" }}>{t("agro.eggBreakdown")}</label>
+                <div className="grid grid-2">
+                  <div><label>{t("agro.calJumbo")}</label><input type="number" min="0" value={r.huevosJumbo} onChange={(e) => setR({ ...r, huevosJumbo: e.target.value })} /></div>
+                  <div><label>{t("agro.calExtra")}</label><input type="number" min="0" value={r.huevosExtra} onChange={(e) => setR({ ...r, huevosExtra: e.target.value })} /></div>
+                  <div><label>{t("agro.calGrande")}</label><input type="number" min="0" value={r.huevosGrande} onChange={(e) => setR({ ...r, huevosGrande: e.target.value })} /></div>
+                  <div><label>{t("agro.calMediano")}</label><input type="number" min="0" value={r.huevosMediano} onChange={(e) => setR({ ...r, huevosMediano: e.target.value })} /></div>
+                  <div><label>{t("agro.calPequeno")}</label><input type="number" min="0" value={r.huevosPequeno} onChange={(e) => setR({ ...r, huevosPequeno: e.target.value })} /></div>
+                  <div><label>{t("agro.eggsBroken")}</label><input type="number" min="0" value={r.huevosRotos} onChange={(e) => setR({ ...r, huevosRotos: e.target.value })} /></div>
+                  <div><label>{t("agro.eggsDirty")}</label><input type="number" min="0" value={r.huevosSucios} onChange={(e) => setR({ ...r, huevosSucios: e.target.value })} /></div>
+                </div>
+              </>
+            )}
             <button className="primary" style={{ marginTop: 10 }}>{t("agro.saveDailyLog")}</button>
             {msg && <span className="success small" style={{ marginLeft: 10 }}>{msg}</span>}
           </form>
@@ -222,8 +501,13 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
               <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                 <thead><tr style={{ textAlign: "left", color: "var(--faint)" }}>
                   <th style={{ padding: "4px 6px" }}>{t("agro.colDate")}</th><th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colMort")}</th>
-                  <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colFeed")}</th><th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colWeight")}</th>
+                  <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colFeed")}</th>
+                  {metricas?.tipoProduccion === "meat" && <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colWeight")}</th>}
                   <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.colProd")}</th>
+                  {metricas?.tipoProduccion === "eggs" && <>
+                    <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.eggsBroken")}</th>
+                    <th style={{ padding: "4px 6px", textAlign: "right" }}>{t("agro.eggsDirty")}</th>
+                  </>}
                 </tr></thead>
                 <tbody>
                   {registros.map((x) => (
@@ -231,12 +515,58 @@ function DetalleLote({ loteId, negocioId, onCambio }: { loteId: string; negocioI
                       <td style={{ padding: "4px 6px" }}>{fecha(x.fecha)}</td>
                       <td style={{ padding: "4px 6px", textAlign: "right" }}>{x.mortalidad}</td>
                       <td style={{ padding: "4px 6px", textAlign: "right" }}>{Number(x.alimentoKg)}</td>
-                      <td style={{ padding: "4px 6px", textAlign: "right" }}>{x.pesoPromedioG != null ? Number(x.pesoPromedioG) : "—"}</td>
+                      {metricas?.tipoProduccion === "meat" && <td style={{ padding: "4px 6px", textAlign: "right" }}>{x.pesoPromedioG != null ? Number(x.pesoPromedioG) : "—"}</td>}
                       <td style={{ padding: "4px 6px", textAlign: "right" }}>{x.produccion}</td>
+                      {metricas?.tipoProduccion === "eggs" && <>
+                        <td style={{ padding: "4px 6px", textAlign: "right" }}>{x.huevosRotos}</td>
+                        <td style={{ padding: "4px 6px", textAlign: "right" }}>{x.huevosSucios}</td>
+                      </>}
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+          )}
+        </>
+      )}
+
+      {tab === "sanidad" && (
+        <>
+          <form onSubmit={agregarEvento} className="grid grid-2">
+            <div><label>{t("agro.eventType")}</label>
+              <select value={ev.tipo} onChange={(e) => setEv({ ...ev, tipo: e.target.value })}>
+                {tiposEvento.map((tv) => (
+                  <option key={tv} value={tv}>
+                    {tv === "vacuna" ? t("agro.eventVaccine") : tv === "tratamiento" ? t("agro.eventTreatment") : tv === "sintoma" ? t("agro.eventSymptom") : t("agro.eventOther")}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div><label>{t("agro.eventName")}</label><input value={ev.nombre} onChange={(e) => setEv({ ...ev, nombre: e.target.value })} required placeholder={t("agro.eventNamePh")} /></div>
+            <div><label>{t("agro.date")}</label><input type="date" value={ev.fecha} onChange={(e) => setEv({ ...ev, fecha: e.target.value })} required /></div>
+            <div><label>{t("agro.withdrawalDays")}</label><input type="number" min="0" value={ev.diasRetiro} onChange={(e) => setEv({ ...ev, diasRetiro: e.target.value })} /></div>
+            <p className="muted small" style={{ gridColumn: "1 / -1", margin: "-4px 0 0" }}>{t("agro.withdrawalHelp")}</p>
+            {errorEvento && <p className="error small" style={{ gridColumn: "1 / -1" }}>{errorEvento}</p>}
+            <button className="primary" style={{ gridColumn: "1 / -1", marginTop: 4 }}>{t("agro.addEvent")}</button>
+          </form>
+
+          {eventos.length === 0 ? (
+            <p className="muted small" style={{ marginTop: 10 }}>{t("agro.noEvents")}</p>
+          ) : (
+            <div style={{ marginTop: 12 }}>
+              {eventos.map((x) => (
+                <div className="list-item" key={x.id}>
+                  <div>
+                    <strong>{x.nombre}</strong>{" "}
+                    <span className="muted small">
+                      · {x.tipo === "vacuna" ? t("agro.eventVaccine") : x.tipo === "tratamiento" ? t("agro.eventTreatment") : x.tipo === "sintoma" ? t("agro.eventSymptom") : t("agro.eventOther")}
+                      {x.diasRetiro != null && ` · ${t("agro.withdrawalDays").replace(" (opcional)", "").replace(" (optional)", "")}: ${x.diasRetiro}`}
+                    </span>
+                    <br /><span className="muted small">{fecha(x.fecha)}</span>
+                  </div>
+                  <button className="ghost small" onClick={() => borrarEvento(x.id)}>✕</button>
+                </div>
+              ))}
             </div>
           )}
         </>

@@ -207,8 +207,17 @@ model Gasto {
   lote      LoteBiologico? @relation(fields: [loteId], references: [id], onDelete: SetNull)
   tipoCosto String?        @map("tipo_costo") @db.VarChar(20) // livestock|feed|medicine|supplies|labor|utilities|transport|other
 
+  // Gasto general de una granja o un galpón completo (luz, mantenimiento…) que no es de UN
+  // lote en particular — no se prorratea entre lotes, es su propio total aparte.
+  granjaId String? @map("granja_id")
+  granja   Granja? @relation(fields: [granjaId], references: [id], onDelete: SetNull)
+  galponId String? @map("galpon_id")
+  galpon   Galpon? @relation(fields: [galponId], references: [id], onDelete: SetNull)
+
   @@index([negocioId])
   @@index([loteId])
+  @@index([granjaId])
+  @@index([galponId])
   @@map("gastos")
 }
 
@@ -249,6 +258,7 @@ model Granja {
   createdAt DateTime @default(now()) @map("created_at")
 
   galpones Galpon[]
+  gastos   Gasto[]
 
   @@index([negocioId])
   @@map("granjas")
@@ -263,7 +273,8 @@ model Galpon {
   notas         String?  @db.Text
   createdAt     DateTime @default(now()) @map("created_at")
 
-  lotes LoteBiologico[]
+  lotes  LoteBiologico[]
+  gastos Gasto[]
 
   @@index([granjaId])
   @@map("galpones")

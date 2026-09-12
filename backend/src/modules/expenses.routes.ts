@@ -16,7 +16,11 @@ expensesRouter.get("/", requireAuth, asyncHandler(async (req, res) => {
   const mes = typeof req.query.mes === "string" && /^\d{4}-\d{2}$/.test(req.query.mes) ? req.query.mes : new Date().toISOString().slice(0, 7);
   const desde = new Date(`${mes}-01T00:00:00`);
   const hasta = new Date(desde); hasta.setMonth(hasta.getMonth() + 1);
-  const gastos = await prisma.gasto.findMany({ where: { negocioId, fecha: { gte: desde, lt: hasta } }, orderBy: { fecha: "desc" } });
+  const gastos = await prisma.gasto.findMany({
+    where: { negocioId, fecha: { gte: desde, lt: hasta } },
+    orderBy: { fecha: "desc" },
+    include: { granja: { select: { nombre: true } }, galpon: { select: { nombre: true } } },
+  });
   const total = round2(gastos.reduce((s, g) => s + Number(g.monto), 0));
   res.json({ gastos, total, mes });
 }));
@@ -27,11 +31,28 @@ const gastoSchema = z.object({
   descripcion: z.string().min(1).max(200),
   monto: z.coerce.number().positive(),
   fecha: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  // Agro: atribuir el gasto a una granja o un galpón (luz, mantenimiento…) en vez de dejarlo
+  // como gasto general del negocio — opcional, solo aplica si el negocio usa esa jerarquía.
+  granjaId: z.string().min(1).optional(),
+  galponId: z.string().min(1).optional(),
 });
 expensesRouter.post("/", requireAuth, asyncHandler(async (req, res) => {
   const d = gastoSchema.parse(req.body);
   await requireAcceso(d.negocioId, req.user!.sub, req.user!.rol, "gastos.crear");
-  const gasto = await prisma.gasto.create({ data: { negocioId: d.negocioId, categoria: d.categoria ?? null, descripcion: d.descripcion, monto: d.monto, fecha: new Date(`${d.fecha}T00:00:00`) } });
+  if (d.granjaId) {
+    const granja = await prisma.granja.findUnique({ where: { id: d.granjaId }, select: { negocioId: true } });
+    if (!granja || granja.negocioId !== d.negocioId) throw NotFound("Granja no encontrada");
+  }
+  if (d.galponId) {
+    const galpon = await prisma.galpon.findUnique({ where: { id: d.galponId }, select: { granja: { select: { negocioId: true } } } });
+    if (!galpon || galpon.granja.negocioId !== d.negocioId) throw NotFound("Galpón no encontrado");
+  }
+  const gasto = await prisma.gasto.create({
+    data: {
+      negocioId: d.negocioId, categoria: d.categoria ?? null, descripcion: d.descripcion, monto: d.monto,
+      fecha: new Date(`${d.fecha}T00:00:00`), granjaId: d.granjaId ?? null, galponId: d.galponId ?? null,
+    },
+  });
   res.status(201).json({ gasto });
 }));
 

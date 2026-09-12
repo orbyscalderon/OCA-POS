@@ -90,6 +90,9 @@ const dict = {
   "gastos.date": { es: "Fecha", en: "Date" },
   "gastos.add": { es: "+ Registrar gasto", en: "+ Log expense" },
   "gastos.empty": { es: "Sin gastos este mes.", en: "No expenses this month." },
+  "gastos.location": { es: "Granja/galpón (opcional)", en: "Farm/shed (optional)" },
+  "gastos.locationGeneral": { es: "Gasto general del negocio", en: "General business expense" },
+  "gastos.locationWholeFarm": { es: "Toda la granja", en: "Whole farm" },
 
   // Módulo Impuestos
   "impuestos.title": { es: "🧮 Impuestos", en: "🧮 Taxes" },
@@ -390,6 +393,8 @@ const dict = {
   "agro.newProductPrice": { es: "Precio de venta", en: "Sale price" },
   "agro.newProductStock": { es: "Stock inicial", en: "Initial stock" },
   "agro.newProductCreate": { es: "Crear y vincular", en: "Create and link" },
+  "agro.expenses": { es: "Gastos", en: "Expenses" },
+  "agro.addExpense": { es: "+ Gasto", en: "+ Expense" },
 
   // Módulo Comercio (POS + Inventario + Caja)
   "pos.title": { es: "🛒 Comercio (POS)", en: "🛒 Commerce (POS)" },

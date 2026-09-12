@@ -26,10 +26,25 @@ agroRouter.get("/granjas", requireAuth, asyncHandler(async (req, res) => {
   await requireAcceso(negocioId, req.user!.sub, req.user!.rol, "agro.gestionar");
   const granjas = await prisma.granja.findMany({
     where: { negocioId },
-    include: { galpones: { orderBy: { nombre: "asc" }, include: { _count: { select: { lotes: true } } } } },
+    include: {
+      gastos: { orderBy: { fecha: "desc" } },
+      galpones: {
+        orderBy: { nombre: "asc" },
+        include: { _count: { select: { lotes: true } }, gastos: { orderBy: { fecha: "desc" } } },
+      },
+    },
     orderBy: { createdAt: "asc" },
   });
-  res.json({ granjas });
+  res.json({
+    granjas: granjas.map((g) => ({
+      ...g,
+      gastosTotal: round2(g.gastos.reduce((s, x) => s + Number(x.monto), 0)),
+      galpones: g.galpones.map((gp) => ({
+        ...gp,
+        gastosTotal: round2(gp.gastos.reduce((s, x) => s + Number(x.monto), 0)),
+      })),
+    })),
+  });
 }));
 
 agroRouter.post("/granjas", requireAuth, asyncHandler(async (req, res) => {

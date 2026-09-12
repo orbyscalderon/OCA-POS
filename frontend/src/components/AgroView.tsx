@@ -17,8 +17,9 @@ interface LoteResumen {
   fechaLibreRetiro: string | null; enRetiro: boolean; alertaConsumo: boolean;
   costoTotal: number; costoPorAve: number; costoPorKg: number | null; ingresoTotal: number; margen: number; margenPct: number | null;
 }
-interface Galpon { id: string; nombre: string; capacidadAves: number | null; _count: { lotes: number } }
-interface Granja { id: string; nombre: string; direccion: string | null; galpones: Galpon[] }
+interface GastoUbicacion { id: string; tipoCosto: string | null; categoria: string | null; descripcion: string; monto: string | number; fecha: string }
+interface Galpon { id: string; nombre: string; capacidadAves: number | null; _count: { lotes: number }; gastos: GastoUbicacion[]; gastosTotal: number }
+interface Granja { id: string; nombre: string; direccion: string | null; galpones: Galpon[]; gastos: GastoUbicacion[]; gastosTotal: number }
 interface PuntoComparativa { edadDias: number; real: number | null; estandar: number | null }
 interface Registro {
   id: string; fecha: string; mortalidad: number; alimentoKg: string | number; pesoPromedioG: string | number | null;
@@ -259,6 +260,8 @@ export function AgroView({ negocio, miRol }: { negocio: Negocio; miRol?: RolNego
   );
 }
 
+// El registro de gastos vive en Contabilidad > Gastos (con selector de granja/galpón ahí) —
+// acá en Agro solo se crea la estructura y se ve el total como referencia rápida.
 function GestionGranjas({ negocioId, granjas, onCambio }: { negocioId: string; granjas: Granja[]; onCambio: () => void }) {
   const { t } = useT();
   const { promptConfirmar, modal } = usePrompt();
@@ -315,7 +318,10 @@ function GestionGranjas({ negocioId, granjas, onCambio }: { negocioId: string; g
             granjas.map((g) => (
               <div key={g.id} className="list-item" style={{ flexDirection: "column", alignItems: "stretch", gap: 4, marginTop: 8 }}>
                 <div className="row spread">
-                  <div><strong>{g.nombre}</strong> {g.direccion && <span className="muted small">· {g.direccion}</span>}</div>
+                  <div>
+                    <strong>{g.nombre}</strong> {g.direccion && <span className="muted small">· {g.direccion}</span>}
+                    {g.gastosTotal > 0 && <span className="badge" style={{ marginLeft: 6 }}>{t("agro.expenses")}: {money(g.gastosTotal)}</span>}
+                  </div>
                   <div className="row" style={{ gap: 6 }}>
                     <button className="ghost small" onClick={() => setGalponAbierto(galponAbierto === g.id ? null : g.id)}>{t("agro.newShed")}</button>
                     <button className="ghost small" onClick={() => borrarGranja(g.id)}>✕</button>
@@ -325,7 +331,10 @@ function GestionGranjas({ negocioId, granjas, onCambio }: { negocioId: string; g
                   <div style={{ paddingLeft: 10 }}>
                     {g.galpones.map((gp) => (
                       <div key={gp.id} className="row spread small muted" style={{ padding: "3px 0" }}>
-                        <span>🏠 {gp.nombre}{gp.capacidadAves != null ? ` · ${gp.capacidadAves} aves` : ""} · {gp._count.lotes} {t("agro.shedsIn")}</span>
+                        <span>
+                          🏠 {gp.nombre}{gp.capacidadAves != null ? ` · ${gp.capacidadAves} aves` : ""} · {gp._count.lotes} {t("agro.shedsIn")}
+                          {gp.gastosTotal > 0 && ` · ${t("agro.expenses")}: ${money(gp.gastosTotal)}`}
+                        </span>
                         <button className="ghost small" onClick={() => borrarGalpon(gp.id)}>✕</button>
                       </div>
                     ))}

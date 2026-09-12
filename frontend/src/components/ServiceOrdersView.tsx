@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
 import { useT, type TKey } from "../i18n";
+import { usePrompt } from "./Ui";
 
 // Módulo ÓRDENES DE SERVICIO (taller / servicio técnico).
 interface Orden {
@@ -22,6 +23,7 @@ export function ServiceOrdersView({ negocio }: { negocio: Negocio }) {
   const [nuevo, setNuevo] = useState(false);
   const [f, setF] = useState({ clienteNombre: "", clienteTelefono: "", equipo: "", problema: "", costoEstimado: "" });
   const [error, setError] = useState("");
+  const { promptValor, modal } = usePrompt();
 
   function cargar() { api.get<{ ordenes: Orden[] }>(`/ordenes-servicio?negocioId=${negocio.id}`).then((r) => setOrdenes(r.ordenes)).catch(() => {}); }
   useEffect(cargar, [negocio.id]);
@@ -73,13 +75,14 @@ export function ServiceOrdersView({ negocio }: { negocio: Negocio }) {
                 {ESTADOS.map((s) => <option key={s} value={s}>{t(LABEL_KEY[s])}</option>)}
               </select>
               <span className="small muted">{t("ordenes.estLabel")}: {money(o.costoEstimado)}</span>
-              <button className="ghost small" onClick={() => { const v = prompt(t("ordenes.finalCostPrompt")); if (v) actualizar(o.id, { costoFinal: Number(v) }); }}>
+              <button className="ghost small" onClick={async () => { const v = await promptValor(t("ordenes.finalCostPrompt")); if (v) actualizar(o.id, { costoFinal: Number(v) }); }}>
                 {t("ordenes.finalLabel")}: {money(o.costoFinal)}
               </button>
             </div>
           </div>
         ))
       )}
+      {modal}
     </div>
   );
 }

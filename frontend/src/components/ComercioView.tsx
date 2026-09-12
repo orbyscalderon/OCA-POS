@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api, ApiError, assetUrl, type Negocio } from "../api";
 import { useT } from "../i18n";
+import { usePrompt } from "./Ui";
 
 // Módulo POS + Inventario + Caja (rubros de retail/alimentos: supermercado, vape, ferretería, farmacia…).
 interface Producto {
@@ -785,9 +786,25 @@ export function Productos({ negocio }: { negocio: Negocio }) {
   const [editandoId, setEditandoId] = useState<string | null>(null);
   const [fe, setFe] = useState<FormProducto>(formVacio);
   const [error, setError] = useState("");
+  const [verInactivos, setVerInactivos] = useState(false);
+  const { promptValor, promptConfirmar, modal } = usePrompt();
 
-  function cargar() { api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}`).then((r) => setProductos(r.productos)).catch(() => {}); }
-  useEffect(cargar, [negocio.id]);
+  function cargar() {
+    api.get<{ productos: Producto[] }>(`/inventario?negocioId=${negocio.id}${verInactivos ? "&todos=1" : ""}`)
+      .then((r) => setProductos(r.productos)).catch(() => {});
+  }
+  useEffect(cargar, [negocio.id, verInactivos]);
+
+  async function eliminar(p: Producto) {
+    if (!(await promptConfirmar(`${t("pos.deleteConfirm")} "${p.nombre}"?`))) return;
+    try { await api.del(`/inventario/${p.id}`); cargar(); }
+    catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
+  }
+
+  async function reactivar(p: Producto) {
+    await api.patch(`/inventario/${p.id}`, { activo: true });
+    cargar();
+  }
 
   // Los campos opcionales llegan como string vacío desde el form (input vacío) — hay que
   // mandarlos como null, si no z.coerce.number() del backend falla al intentar convertir "".
@@ -837,19 +854,19 @@ export function Productos({ negocio }: { negocio: Negocio }) {
   async function ajustar(p: Producto, tipo: "entrada" | "salida") {
     const vol = num(p.volumenMl);
     const esLiquido = p.volumenMl != null && vol > 0;
-    // Al líquido le entran botellas enteras, no ml sueltos — se pregunta cuántas unidades
-    // entraron y se calculan solos los ml reales (unidades × ml por botella), en vez de
-    // obligar a hacer la cuenta a mano cada vez que llega mercancía.
-    if (tipo === "entrada" && esLiquido) {
-      const v = prompt(`${t("pos.stockInPrompt")} "${p.nombre}" — ${t("pos.unitsBottlesPrompt")} (${vol} ml ${t("pos.each")}):`);
+    const etiqueta = tipo === "entrada" ? t("pos.stockInPrompt") : t("pos.stockOutPrompt");
+    // Un líquido se maneja por botellas enteras, no ml sueltos — se pregunta cuántas unidades
+    // (entran o salen) y se calculan solos los ml reales (unidades × ml por botella), en vez
+    // de obligar a hacer la cuenta a mano cada vez.
+    if (esLiquido) {
+      const v = await promptValor(`${etiqueta} "${p.nombre}" — ${t("pos.unitsBottlesPrompt")} (${vol} ml ${t("pos.each")}):`);
       if (!v || !Number(v)) return;
       const cantidad = Number(v) * vol;
       await api.post(`/inventario/${p.id}/stock`, { tipo, cantidad, motivo: `${tipo}: ${v} ${t("pos.unitsShort")}` });
       cargar();
       return;
     }
-    const etiqueta = tipo === "entrada" ? t("pos.stockInPrompt") : t("pos.stockOutPrompt");
-    const v = prompt(`${etiqueta} ${t("pos.stockPromptSuffix")} "${p.nombre}" (${t("pos.quantity")}${esLiquido ? " en ml" : ""}):`);
+    const v = await promptValor(`${etiqueta} ${t("pos.stockPromptSuffix")} "${p.nombre}" (${t("pos.quantity")}):`);
     if (!v) return;
     await api.post(`/inventario/${p.id}/stock`, { tipo, cantidad: Number(v), motivo: tipo });
     cargar();
@@ -860,7 +877,10 @@ export function Productos({ negocio }: { negocio: Negocio }) {
       <PerfilesDispositivo negocioId={negocio.id} />
       <div className="row spread" style={{ marginTop: 12 }}>
         <span className="muted small">{productos.length} {t("pos.products")}</span>
-        <button className={nuevo ? "ghost small" : "primary small"} onClick={() => { setNuevo((v) => !v); setEditandoId(null); }}>{nuevo ? t("common.cancel") : t("pos.newProduct")}</button>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="ghost small" onClick={() => setVerInactivos((v) => !v)}>{verInactivos ? t("pos.hideInactive") : t("pos.showInactive")}</button>
+          <button className={nuevo ? "ghost small" : "primary small"} onClick={() => { setNuevo((v) => !v); setEditandoId(null); }}>{nuevo ? t("common.cancel") : t("pos.newProduct")}</button>
+        </div>
       </div>
       {nuevo && (
         <form onSubmit={crear} className="card" style={{ background: "var(--surface-2)", marginTop: 8 }}>
@@ -895,6 +915,10 @@ export function Productos({ negocio }: { negocio: Negocio }) {
             );
           }
           const fuente = p.productoFuenteId ? productos.find((x) => x.id === p.productoFuenteId) : null;
+          // El stock de un líquido siempre se lleva en ml (no importa qué diga p.unidad, que
+          // por defecto queda en "UND") — mostrar "UND" ahí confunde: 300 no son 300 potes,
+          // son 300 ml sueltos (equivalentes a 3 potes de 100ml).
+          const esLiquido = p.volumenMl != null && num(p.volumenMl) > 0;
           const atributos = [p.volumenMl != null ? `${num(p.volumenMl)}ml` : null, p.nicotinaMg != null ? `${num(p.nicotinaMg)}mg` : null].filter(Boolean).join(" · ");
           const dias = p.fechaVencimiento ? diasParaVencer(p.fechaVencimiento) : null;
           return (
@@ -904,11 +928,16 @@ export function Productos({ negocio }: { negocio: Negocio }) {
                 <div>
                   <strong>{p.nombre}</strong> <span className="muted small">{p.sku ?? ""}</span>
                   {p.tipoProducto === "hardware" && <span className="badge" style={{ marginLeft: 4 }}>{t("pos.typeHardware")}</span>}
+                  {!p.activo && <span className="badge err" style={{ marginLeft: 4 }}>{t("pos.inactive")}</span>}
                   {atributos && <span className="muted small"> · {atributos}</span>}<br />
                   {fuente ? (
                     <span className="badge">{t("pos.refillOf")} {fuente.nombre}</span>
                   ) : (
-                    <span className={`badge ${bajo ? "err" : "ok"}`}>{t("pos.stock")}: {num(p.stock)} {p.unidad}</span>
+                    <span className={`badge ${bajo ? "err" : "ok"}`}>
+                      {esLiquido
+                        ? `${t("pos.stock")}: ${(num(p.stock) / num(p.volumenMl)).toFixed(2).replace(/\.?0+$/, "")} ${t("pos.unitsShort")} (${num(p.stock)} ml)`
+                        : `${t("pos.stock")}: ${num(p.stock)} ${p.unidad}`}
+                    </span>
                   )}
                   <span className="muted small"> · {money(p.precioVenta)}</span>
                   {dias != null && (
@@ -919,14 +948,22 @@ export function Productos({ negocio }: { negocio: Negocio }) {
                 </div>
               </div>
               <div className="row">
-                <button className="ghost small" onClick={() => empezarEdicion(p)}>{t("pos.edit")}</button>
-                {!fuente && <button className="ghost small" onClick={() => ajustar(p, "entrada")}>{t("pos.stockIn")}</button>}
-                {!fuente && <button className="ghost small" onClick={() => ajustar(p, "salida")}>{t("pos.stockOut")}</button>}
+                {p.activo ? (
+                  <>
+                    <button className="ghost small" onClick={() => empezarEdicion(p)}>{t("pos.edit")}</button>
+                    {!fuente && <button className="ghost small" onClick={() => ajustar(p, "entrada")}>{t("pos.stockIn")}</button>}
+                    {!fuente && <button className="ghost small" onClick={() => ajustar(p, "salida")}>{t("pos.stockOut")}</button>}
+                    <button className="ghost small" onClick={() => eliminar(p)}>{t("common.delete")}</button>
+                  </>
+                ) : (
+                  <button className="ghost small" onClick={() => reactivar(p)}>{t("pos.reactivate")}</button>
+                )}
               </div>
             </div>
           );
         })
       )}
+      {modal}
     </div>
   );
 }

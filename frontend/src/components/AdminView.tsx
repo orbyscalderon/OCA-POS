@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { api, ApiError, assetUrl, descargarCSV, puedeNegocio, rolNegocioLabel, ROLES_ASIGNABLES, GRUPOS_PERMISOS, PLANTILLAS_PERMISOS, type Negocio, type Perfil, type RolNegocio, type Permiso } from "../api";
 import { useT } from "../i18n";
 import { COMPANY } from "../company";
-import { Stat } from "./Ui";
+import { Stat, usePrompt } from "./Ui";
 import { MapaUbicacion } from "./MapaUbicacion";
 import { PrestamosView } from "./PrestamosView";
 import { Vender, Productos, Caja } from "./ComercioView";
@@ -582,6 +582,7 @@ function PersonalNegocio({ negocioId, modulos }: { negocioId: string; modulos: s
   const [error, setError] = useState("");
   const [editando, setEditando] = useState<string | null>(null);
   const [permisosEditar, setPermisosEditar] = useState<Permiso[]>([]);
+  const { promptConfirmar, modal } = usePrompt();
 
   // App de escritorio: crea la cuenta directo, ya que un link de invitación no le llegaría a
   // nadie (el servidor solo es alcanzable en esta misma PC).
@@ -636,7 +637,7 @@ function PersonalNegocio({ negocioId, modulos }: { negocioId: string; modulos: s
   }
 
   async function quitar(m: MiembroFuncional) {
-    if (!confirm(`${t("admin.removeConfirm")} ${m.usuario.nombre} ${t("admin.removeConfirmSuffix")}`)) return;
+    if (!(await promptConfirmar(`${t("admin.removeConfirm")} ${m.usuario.nombre} ${t("admin.removeConfirmSuffix")}`))) return;
     await api.del(`/negocios/${negocioId}/miembros/${m.id}`);
     cargar();
   }
@@ -695,6 +696,7 @@ function PersonalNegocio({ negocioId, modulos }: { negocioId: string; modulos: s
           )}
         </>
       )}
+      {modal}
     </div>
   );
 }

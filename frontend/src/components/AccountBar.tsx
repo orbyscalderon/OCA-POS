@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api, ApiError } from "../api";
 import { useAuth } from "../auth";
 import { useT } from "../i18n";
+import { usePrompt } from "./Ui";
 
 // App de escritorio: sin backend de email real configurado, no tiene sentido pedirle al
 // dueño que "verifique su email" — es su propia instalación local, no una cuenta pública.
@@ -43,6 +44,7 @@ export function CuentaMenu() {
   const [msg, setMsg] = useState("");
   const [abierto, setAbierto] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const { promptConfirmar, modal } = usePrompt();
 
   useEffect(() => {
     if (!abierto) return;
@@ -70,7 +72,7 @@ export function CuentaMenu() {
   }
 
   async function borrar() {
-    if (!confirm(t("account.deleteConfirm"))) return;
+    if (!(await promptConfirmar(t("account.deleteConfirm")))) return;
     await api.del("/auth/me");
     logout();
   }
@@ -90,6 +92,7 @@ export function CuentaMenu() {
           {msg && <p className="error small" style={{ margin: "6px 0 0" }}>{msg}</p>}
         </div>
       )}
+      {modal}
     </div>
   );
 }

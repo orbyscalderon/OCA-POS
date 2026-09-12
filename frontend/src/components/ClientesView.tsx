@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api, ApiError, type Negocio } from "../api";
 import { useT } from "../i18n";
+import { usePrompt } from "./Ui";
 
 // Módulo CLIENTES (CRM básico del negocio).
 interface Cliente { id: string; nombre: string; telefono: string | null; email: string | null; direccion: string | null; notas: string | null; puntos: number; saldoFiado: string | number }
@@ -13,11 +14,12 @@ export function ClientesView({ negocio, loyalty = false, credit = false, puedeEd
   const [nuevo, setNuevo] = useState(false);
   const [f, setF] = useState({ nombre: "", telefono: "", email: "", direccion: "", notas: "" });
   const [error, setError] = useState("");
+  const { promptValor, promptConfirmar, modal } = usePrompt();
 
   async function eliminar(c: Cliente) {
-    if (!confirm(`${t("clientes.deleteConfirm")} ${c.nombre}?`)) return;
+    if (!(await promptConfirmar(`${t("clientes.deleteConfirm")} ${c.nombre}?`))) return;
     try { await api.del(`/clientes/${c.id}`); cargar(); }
-    catch (err) { alert(err instanceof ApiError ? err.message : t("common.error")); }
+    catch (err) { setError(err instanceof ApiError ? err.message : t("common.error")); }
   }
 
   function cargar() {
@@ -34,16 +36,16 @@ export function ClientesView({ negocio, loyalty = false, credit = false, puedeEd
 
   const paraPremio = negocio.puntosParaPremio ?? 10;
   async function canjear(c: Cliente) {
-    if (!confirm(`${t("clientes.redeemConfirm")} ${c.nombre}?`)) return;
+    if (!(await promptConfirmar(`${t("clientes.redeemConfirm")} ${c.nombre}?`))) return;
     await puntos(c.id, -paraPremio);
   }
 
   async function cobrar(c: Cliente) {
     const saldo = Number(c.saldoFiado);
-    const v = prompt(`${t("clientes.collectPrompt")} "${c.nombre}" (${t("clientes.owes").toLowerCase()} ${money(saldo)}):`, saldo.toFixed(2));
+    const v = await promptValor(`${t("clientes.collectPrompt")} "${c.nombre}" (${t("clientes.owes").toLowerCase()} ${money(saldo)}):`, saldo.toFixed(2));
     if (!v) return;
     try { await api.post(`/clientes/${c.id}/pagos`, { monto: Number(v) }); cargar(); }
-    catch (err) { alert(err instanceof ApiError ? err.message : t("clientes.collectError")); }
+    catch (err) { setError(err instanceof ApiError ? err.message : t("clientes.collectError")); }
   }
 
   return (
@@ -89,6 +91,8 @@ export function ClientesView({ negocio, loyalty = false, credit = false, puedeEd
         );
       })}
       {clientes.length === 0 && <p className="muted small" style={{ marginTop: 8 }}>{t("clientes.empty")}</p>}
+      {error && <p className="error small" style={{ marginTop: 8 }}>{error}</p>}
+      {modal}
     </div>
   );
 }
